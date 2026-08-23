@@ -83,9 +83,9 @@ lib/
 3. **Conexión REST a Exchanges**:
    * **Paquetes**: `http` y `crypto` (HMAC SHA256).
    * **Exchanges Integrados**:
-     * **KuCoin**: Klines públicos, tickers y private endpoint `/api/v1/fills` (requiere firma KC-API + passphrase cifrada, paginación obligatoria en bloques de 7 días).
-     * **Binance**: Klines públicos, tickers y private endpoint `/api/v3/myTrades` (firma HMAC SHA256).
-     * **BingX**: Klines públicos, tickers y private endpoint `/openApi/spot/v1/trade/myTrades`.
+     * **KuCoin**: Klines públicos, tickers, balance de cuentas (`/api/v1/accounts`) y private fills (`/api/v1/fills`) con paginación iterativa en bloques de 7 días cubriendo hasta el límite máximo de retención API de 2 años (730 días) con barra de progreso en vivo.
+     * **Binance**: Klines públicos, tickers, balance de cuentas (`/api/v3/account`) y private trades (`/api/v3/myTrades`) en bloques de 30 días hasta 2 años con progreso en vivo.
+     * **BingX**: Klines públicos, tickers, balance spot (`/openApi/spot/v1/account/balance`) y private trades (`/openApi/spot/v1/trade/myTrades`) en bloques de 30 días hasta 2 años con progreso en vivo.
 
 4. **Gestión de Estado**:
    * **Paquete**: `provider` (`WatchlistProvider`, `ChartProvider`, `TrackerProvider`).
