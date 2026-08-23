@@ -3,16 +3,17 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import 'core/theme/app_colors.dart';
+import 'core/theme/app_theme.dart';
 import 'features/watchlist/providers/watchlist_provider.dart';
 import 'features/chart/providers/chart_provider.dart';
 import 'features/tracker/providers/tracker_provider.dart';
-
 import 'features/watchlist/presentation/watchlist_screen.dart';
 import 'features/chart/presentation/chart_screen.dart';
 import 'features/tracker/presentation/tracker_screen.dart';
 
 void main() {
-  // Ensure Flutter binding is initialized
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize SQLite for Desktop (Windows)
@@ -41,21 +42,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'CryptoView',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF0C0F14),
-        primaryColor: const Color(0xFF00E6B8),
-        colorScheme: const ColorScheme.dark(
-          primary: Color(0xFF00E6B8),
-          secondary: Color(0xFFF0B90B),
-          background: Color(0xFF0C0F14),
-          surface: Color(0xFF171A22),
-        ),
-        textTheme: const TextTheme(
-          bodyLarge: TextStyle(color: Colors.white, fontFamily: 'Outfit'),
-          bodyMedium: TextStyle(color: Color(0xFF90A4AE), fontFamily: 'Outfit'),
-        ),
-      ),
+      theme: AppTheme.darkTheme,
       home: const MainContainer(),
     );
   }
@@ -70,7 +57,6 @@ class MainContainer extends StatefulWidget {
 
 class _MainContainerState extends State<MainContainer> {
   int _currentIndex = 0;
-
   late final List<Widget> _screens;
 
   @override
@@ -96,7 +82,7 @@ class _MainContainerState extends State<MainContainer> {
 
     if (isWide) {
       return Scaffold(
-        backgroundColor: const Color(0xFF0C0F14),
+        backgroundColor: AppColors.background,
         body: Row(
           children: [
             // Left Sidebar: Watchlist
@@ -105,20 +91,14 @@ class _MainContainerState extends State<MainContainer> {
               child: WatchlistScreen(onTabChange: (_) {}),
             ),
             // Vertical Separator
-            Container(
-              width: 1,
-              color: const Color(0xFF1E2738),
-            ),
+            Container(width: 1, color: AppColors.divider),
             // Middle: Chart Screen
             const Expanded(
               flex: 5,
               child: ChartScreen(),
             ),
             // Vertical Separator
-            Container(
-              width: 1,
-              color: const Color(0xFF1E2738),
-            ),
+            Container(width: 1, color: AppColors.divider),
             // Right: Tracker/Operations
             const Expanded(
               flex: 4,
@@ -137,17 +117,10 @@ class _MainContainerState extends State<MainContainer> {
       ),
       bottomNavigationBar: Container(
         decoration: const BoxDecoration(
-          border: Border(
-            top: BorderSide(color: Color(0xFF1E2738), width: 1),
-          ),
+          border: Border(top: BorderSide(color: AppColors.divider, width: 1)),
         ),
         child: BottomNavigationBar(
-          backgroundColor: const Color(0xFF12161F),
           currentIndex: _currentIndex,
-          selectedItemColor: const Color(0xFF00E6B8),
-          unselectedItemColor: const Color(0xFF90A4AE),
-          showUnselectedLabels: true,
-          type: BottomNavigationBarType.fixed,
           onTap: (index) {
             setState(() {
               _currentIndex = index;
@@ -156,17 +129,17 @@ class _MainContainerState extends State<MainContainer> {
           items: const [
             BottomNavigationBarItem(
               icon: Icon(Icons.star_border),
-              activeIcon: Icon(Icons.star, color: Color(0xFF00E6B8)),
+              activeIcon: Icon(Icons.star, color: AppColors.primary),
               label: 'Seguimiento',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.show_chart),
-              activeIcon: Icon(Icons.show_chart, color: Color(0xFF00E6B8)),
+              activeIcon: Icon(Icons.show_chart, color: AppColors.primary),
               label: 'Gráfico',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.account_balance_wallet_outlined),
-              activeIcon: Icon(Icons.account_balance_wallet, color: Color(0xFF00E6B8)),
+              activeIcon: Icon(Icons.account_balance_wallet, color: AppColors.primary),
               label: 'Diario',
             ),
           ],
