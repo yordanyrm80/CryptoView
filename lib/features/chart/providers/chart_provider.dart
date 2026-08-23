@@ -144,14 +144,11 @@ class ChartProvider extends ChangeNotifier {
 
     try {
       // 1. Fetch candles from exchange using activeInterval
-      List<Map<String, dynamic>> fetchedCandles = [];
-      if (exchange.toLowerCase() == 'binance') {
-        fetchedCandles = await ExchangeService.instance.fetchBinanceKlines(symbol, _activeInterval);
-      } else if (exchange.toLowerCase() == 'kucoin') {
-        fetchedCandles = await ExchangeService.instance.fetchKucoinKlines(symbol, _activeInterval);
-      } else if (exchange.toLowerCase() == 'bingx') {
-        fetchedCandles = await ExchangeService.instance.fetchBingXKlines(symbol, _activeInterval);
-      }
+      List<Map<String, dynamic>> fetchedCandles = await ExchangeService.instance.fetchKlines(
+        exchange,
+        symbol,
+        _activeInterval,
+      );
       _candles = fetchedCandles;
 
       // 2. Fetch drawings from SQLite

@@ -6,7 +6,6 @@ class KucoinService {
   static final KucoinService instance = KucoinService._init();
   KucoinService._init();
 
-  /// Map common interval strings to KuCoin API interval format
   String _mapInterval(String interval) {
     switch (interval) {
       case '1m': return '1min';
@@ -19,7 +18,6 @@ class KucoinService {
     }
   }
 
-  /// Format symbol to KuCoin DASH format (e.g. BTC-USDT)
   String _formatSymbol(String symbol) {
     String formatted = symbol.replaceAll('/', '-').toUpperCase();
     if (!formatted.contains('-')) {
@@ -30,7 +28,6 @@ class KucoinService {
     return formatted;
   }
 
-  /// Fetch K-line (candlestick) history from KuCoin
   Future<List<Map<String, dynamic>>> fetchCandles(String symbol, String interval) async {
     final formattedSymbol = _formatSymbol(symbol);
     final kucoinInterval = _mapInterval(interval);
@@ -57,12 +54,10 @@ class KucoinService {
       }
       throw Exception('Failed to load KuCoin candles: ${response.statusCode}');
     } catch (e) {
-      print('Error fetching KuCoin candles: $e');
       return [];
     }
   }
 
-  /// Fetch ticker prices for given symbols from KuCoin
   Future<Map<String, double>> fetchPrices(List<String> symbols) async {
     final Map<String, double> priceMap = {for (var s in symbols) s: 0.0};
     try {
@@ -84,7 +79,7 @@ class KucoinService {
         }
       }
     } catch (e) {
-      print('Error fetching KuCoin prices: $e');
+      // Ignored
     }
     return priceMap;
   }
@@ -104,7 +99,51 @@ class KucoinService {
     return base64.encode(digest.bytes);
   }
 
-  /// Fetch private transaction history (fills) from KuCoin (7-day chunks + grouped by orderId)
+  /// Fetch private balances from KuCoin
+  Future<Map<String, double>> fetchBalances({
+    required String apiKey,
+    required String apiSecret,
+    required String apiPassphrase,
+  }) async {
+    final timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+    const requestPath = '/api/v1/accounts';
+    final url = Uri.parse('https://api.kucoin.com$requestPath');
+
+    try {
+      final signature = _generateSignature(apiSecret, timestamp, 'GET', requestPath, '');
+      final encryptedPassphrase = _generatePassphrase(apiSecret, apiPassphrase);
+
+      final response = await http.get(
+        url,
+        headers: {
+          'KC-API-KEY': apiKey,
+          'KC-API-SIGN': signature,
+          'KC-API-TIMESTAMP': timestamp,
+          'KC-API-PASSPHRASE': encryptedPassphrase,
+          'KC-API-KEY-VERSION': '2',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> root = json.decode(response.body);
+        if (root['code'] == '200000') {
+          final List<dynamic> items = root['data'];
+          final Map<String, double> balances = {};
+          for (var item in items) {
+            final currency = item['currency'].toString().toUpperCase();
+            final available = double.tryParse(item['available'].toString()) ?? 0.0;
+            balances[currency] = (balances[currency] ?? 0.0) + available;
+          }
+          return balances;
+        }
+      }
+    } catch (e) {
+      // Ignored
+    }
+    return {};
+  }
+
   Future<List<Map<String, dynamic>>> fetchFills({
     required String symbol,
     required String apiKey,
@@ -125,7 +164,7 @@ class KucoinService {
 
       final startMs = currentStart.millisecondsSinceEpoch;
       final endMs = currentEnd.millisecondsSinceEpoch;
-      final endpoint = '/api/v1/fills';
+      const endpoint = '/api/v1/fills';
       final queryParams = 'endAt=$endMs&limit=100&startAt=$startMs&symbol=$formattedSymbol';
       final requestPath = '$endpoint?$queryParams';
       final url = Uri.parse('https://api.kucoin.com$requestPath');
@@ -167,15 +206,12 @@ class KucoinService {
               }
             }
           } else {
-            print('KuCoin API warning: ${root['msg']}');
             break;
           }
         } else {
-          print('KuCoin API HTTP error: ${response.statusCode} | ${response.body}');
           break;
         }
       } catch (e) {
-        print('Error fetching KuCoin fills block: $e');
         break;
       }
 
@@ -183,7 +219,6 @@ class KucoinService {
       await Future.delayed(const Duration(milliseconds: 200));
     }
 
-    // Merge multiple fills belonging to the same orderId
     final Map<String, List<Map<String, dynamic>>> grouped = {};
     for (var fill in allFills) {
       final orderId = fill['orderId'] as String;

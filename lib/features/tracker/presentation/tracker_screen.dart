@@ -24,6 +24,8 @@ class _TrackerScreenState extends State<TrackerScreen> with SingleTickerProvider
   TransactionModel? _selectedBuyForMatch;
   TransactionModel? _selectedSellForMatch;
   bool _isSyncing = false;
+  String? _lastContextSymbol;
+  String? _lastContextExchange;
 
   @override
   void initState() {
@@ -32,6 +34,26 @@ class _TrackerScreenState extends State<TrackerScreen> with SingleTickerProvider
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<TrackerProvider>(context, listen: false).loadData();
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final watchlistProvider = Provider.of<WatchlistProvider>(context);
+    final trackerProvider = Provider.of<TrackerProvider>(context, listen: false);
+
+    if (_lastContextSymbol != watchlistProvider.selectedSymbol ||
+        _lastContextExchange != watchlistProvider.currentExchange) {
+      _lastContextSymbol = watchlistProvider.selectedSymbol;
+      _lastContextExchange = watchlistProvider.currentExchange;
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        trackerProvider.updateActiveContext(
+          watchlistProvider.selectedSymbol,
+          watchlistProvider.currentExchange,
+        );
+      });
+    }
   }
 
   @override
@@ -135,15 +157,29 @@ class _TrackerScreenState extends State<TrackerScreen> with SingleTickerProvider
   @override
   Widget build(BuildContext context) {
     final trackerProvider = Provider.of<TrackerProvider>(context);
+    final watchlistProvider = Provider.of<WatchlistProvider>(context);
+
+    final currentMatches = trackerProvider.filteredMatches;
+    final currentBuys = trackerProvider.filteredOpenBuys;
+    final currentSells = trackerProvider.filteredOpenSells;
 
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.card,
         elevation: 0,
-        title: const Text(
-          'Diario de Trading & Casamientos',
-          style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 18),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Diario de Casamiento',
+              style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 17),
+            ),
+            Text(
+              '${watchlistProvider.selectedSymbol} · ${watchlistProvider.currentExchange}',
+              style: const TextStyle(color: AppColors.primary, fontSize: 12),
+            ),
+          ],
         ),
         actions: [
           IconButton(
@@ -166,119 +202,133 @@ class _TrackerScreenState extends State<TrackerScreen> with SingleTickerProvider
           labelColor: AppColors.primary,
           unselectedLabelColor: AppColors.textSecondary,
           tabs: [
-            Tab(text: 'Casados (${trackerProvider.matches.length})'),
-            Tab(text: 'Compras (${trackerProvider.openBuys.length})'),
-            Tab(text: 'Ventas (${trackerProvider.openSells.length})'),
+            Tab(text: 'Casados (${currentMatches.length})'),
+            Tab(text: 'Compras (${currentBuys.length})'),
+            Tab(text: 'Ventas (${currentSells.length})'),
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: Column(
         children: [
-          // Tab 1: Historial de Casamientos
-          Column(
-            children: [
-              MetricsHeaderCard(
-                totalProfit: trackerProvider.totalProfit,
-                winRate: trackerProvider.winRate,
-                totalMatches: trackerProvider.matches.length,
-              ),
-              Expanded(
-                child: trackerProvider.matches.isEmpty
+          MetricsHeaderCard(
+            provider: trackerProvider,
+            onRefreshBalance: () => trackerProvider.fetchLiveBalance(watchlistProvider.currentExchange),
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                // Tab 1: Historial de Casamientos
+                currentMatches.isEmpty
                     ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
-                            Icon(Icons.link_off, size: 64, color: AppColors.border),
-                            SizedBox(height: 16),
-                            Text('No hay operaciones casadas', style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
-                            SizedBox(height: 8),
-                            Text('Empareja una compra con una venta para calcular PnL.', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                          children: [
+                            const Icon(Icons.link_off, size: 54, color: AppColors.border),
+                            const SizedBox(height: 12),
+                            Text(
+                              trackerProvider.filterOnlyCurrentSymbol
+                                  ? 'No hay operaciones casadas en ${trackerProvider.activeSymbol}'
+                                  : 'No hay operaciones casadas',
+                              style: const TextStyle(color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 6),
+                            const Text('Empareja una compra con una venta para calcular PnL.', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
                           ],
                         ),
                       )
                     : ListView.builder(
                         physics: const BouncingScrollPhysics(),
-                        itemCount: trackerProvider.matches.length,
-                        itemBuilder: (context, i) => MatchTile(match: trackerProvider.matches[i], provider: trackerProvider),
+                        itemCount: currentMatches.length,
+                        itemBuilder: (context, i) => MatchTile(match: currentMatches[i], provider: trackerProvider),
                       ),
-              ),
-            ],
+
+                // Tab 2: Compras Abiertas
+                currentBuys.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.shopping_bag_outlined, size: 54, color: AppColors.border),
+                            const SizedBox(height: 12),
+                            Text(
+                              trackerProvider.filterOnlyCurrentSymbol
+                                  ? 'No hay compras abiertas en ${trackerProvider.activeSymbol}'
+                                  : 'No hay compras abiertas',
+                              style: const TextStyle(color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 6),
+                            const Text('Sincroniza desde API o registra una con el botón +.', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        physics: const BouncingScrollPhysics(),
+                        itemCount: currentBuys.length,
+                        itemBuilder: (context, i) {
+                          final tx = currentBuys[i];
+                          final isSelected = _selectedBuyForMatch?.id == tx.id;
+                          return TransactionTile(
+                            tx: tx,
+                            provider: trackerProvider,
+                            isSelected: isSelected,
+                            onSelectForMatch: () {
+                              setState(() {
+                                _selectedBuyForMatch = isSelected ? null : tx;
+                              });
+                              if (_selectedBuyForMatch != null && _selectedSellForMatch != null) {
+                                _showMatchConfirmDialog(trackerProvider);
+                              }
+                            },
+                            onTapDetail: () => _showTransactionDetail(tx, trackerProvider),
+                          );
+                        },
+                      ),
+
+                // Tab 3: Ventas Abiertas
+                currentSells.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.sell_outlined, size: 54, color: AppColors.border),
+                            const SizedBox(height: 12),
+                            Text(
+                              trackerProvider.filterOnlyCurrentSymbol
+                                  ? 'No hay ventas abiertas en ${trackerProvider.activeSymbol}'
+                                  : 'No hay ventas abiertas',
+                              style: const TextStyle(color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 6),
+                            const Text('Sincroniza desde API o registra una con el botón +.', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        physics: const BouncingScrollPhysics(),
+                        itemCount: currentSells.length,
+                        itemBuilder: (context, i) {
+                          final tx = currentSells[i];
+                          final isSelected = _selectedSellForMatch?.id == tx.id;
+                          return TransactionTile(
+                            tx: tx,
+                            provider: trackerProvider,
+                            isSelected: isSelected,
+                            onSelectForMatch: () {
+                              setState(() {
+                                _selectedSellForMatch = isSelected ? null : tx;
+                              });
+                              if (_selectedBuyForMatch != null && _selectedSellForMatch != null) {
+                                _showMatchConfirmDialog(trackerProvider);
+                              }
+                            },
+                            onTapDetail: () => _showTransactionDetail(tx, trackerProvider),
+                          );
+                        },
+                      ),
+              ],
+            ),
           ),
-
-          // Tab 2: Compras Abiertas
-          trackerProvider.openBuys.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
-                      Icon(Icons.shopping_bag_outlined, size: 64, color: AppColors.border),
-                      SizedBox(height: 16),
-                      Text('No hay compras abiertas', style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
-                      SizedBox(height: 8),
-                      Text('Sincroniza desde API o registra una con el botón +.', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
-                    ],
-                  ),
-                )
-              : ListView.builder(
-                  physics: const BouncingScrollPhysics(),
-                  itemCount: trackerProvider.openBuys.length,
-                  itemBuilder: (context, i) {
-                    final tx = trackerProvider.openBuys[i];
-                    final isSelected = _selectedBuyForMatch?.id == tx.id;
-                    return TransactionTile(
-                      tx: tx,
-                      provider: trackerProvider,
-                      isSelected: isSelected,
-                      onSelectForMatch: () {
-                        setState(() {
-                          _selectedBuyForMatch = isSelected ? null : tx;
-                        });
-                        if (_selectedBuyForMatch != null && _selectedSellForMatch != null) {
-                          _showMatchConfirmDialog(trackerProvider);
-                        }
-                      },
-                      onTapDetail: () => _showTransactionDetail(tx, trackerProvider),
-                    );
-                  },
-                ),
-
-          // Tab 3: Ventas Abiertas
-          trackerProvider.openSells.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
-                      Icon(Icons.sell_outlined, size: 64, color: AppColors.border),
-                      SizedBox(height: 16),
-                      Text('No hay ventas abiertas', style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
-                      SizedBox(height: 8),
-                      Text('Sincroniza desde API o registra una con el botón +.', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
-                    ],
-                  ),
-                )
-              : ListView.builder(
-                  physics: const BouncingScrollPhysics(),
-                  itemCount: trackerProvider.openSells.length,
-                  itemBuilder: (context, i) {
-                    final tx = trackerProvider.openSells[i];
-                    final isSelected = _selectedSellForMatch?.id == tx.id;
-                    return TransactionTile(
-                      tx: tx,
-                      provider: trackerProvider,
-                      isSelected: isSelected,
-                      onSelectForMatch: () {
-                        setState(() {
-                          _selectedSellForMatch = isSelected ? null : tx;
-                        });
-                        if (_selectedBuyForMatch != null && _selectedSellForMatch != null) {
-                          _showMatchConfirmDialog(trackerProvider);
-                        }
-                      },
-                      onTapDetail: () => _showTransactionDetail(tx, trackerProvider),
-                    );
-                  },
-                ),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(

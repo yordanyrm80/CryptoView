@@ -174,9 +174,11 @@ class DatabaseHelper {
     return await db.rawQuery('''
       SELECT 
         m.id, 
+        m.buy_transaction_id,
+        m.sell_transaction_id,
         m.matched_amount, 
         m.profit, 
-        m.date AS match_date,
+        m.date,
         t_buy.price AS buy_price,
         t_sell.price AS sell_price,
         t_buy.symbol,

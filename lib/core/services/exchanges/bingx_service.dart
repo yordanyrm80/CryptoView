@@ -16,7 +16,6 @@ class BingxService {
     return formatted;
   }
 
-  /// Fetch K-line (candlestick) history from BingX
   Future<List<Map<String, dynamic>>> fetchKlines(String symbol, String interval, {int limit = 150}) async {
     final formattedSymbol = _formatSymbol(symbol);
     final url = Uri.parse('https://open-api.bingx.com/openApi/spot/v2/market/kline?symbol=$formattedSymbol&interval=$interval&limit=$limit');
@@ -43,12 +42,10 @@ class BingxService {
       }
       throw Exception('Failed to load BingX candles: ${response.statusCode}');
     } catch (e) {
-      print('Error fetching BingX klines: $e');
       return [];
     }
   }
 
-  /// Fetch ticker prices for given symbols from BingX
   Future<Map<String, double>> fetchPrices(List<String> symbols) async {
     final Map<String, double> priceMap = {for (var s in symbols) s: 0.0};
     try {
@@ -70,12 +67,53 @@ class BingxService {
         }
       }
     } catch (e) {
-      print('Error fetching BingX prices: $e');
+      // Ignored
     }
     return priceMap;
   }
 
-  /// Fetch private transaction history from BingX
+  /// Fetch private balances from BingX
+  Future<Map<String, double>> fetchBalances({
+    required String apiKey,
+    required String apiSecret,
+  }) async {
+    final timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+    final queryParams = 'recvWindow=5000&timestamp=$timestamp';
+    final key = utf8.encode(apiSecret);
+    final hmac = Hmac(sha256, key);
+    final digest = hmac.convert(utf8.encode(queryParams));
+    final signature = digest.toString();
+    final url = Uri.parse('https://open-api.bingx.com/openApi/spot/v1/account/balance?$queryParams&signature=$signature');
+
+    try {
+      final response = await http.get(
+        url,
+        headers: {
+          'X-BX-APIKEY': apiKey,
+          'Content-Type': 'application/json',
+        },
+      );
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> root = json.decode(response.body);
+        if (root['code'] == 0) {
+          final List<dynamic>? balancesList = root['data']?['balances'];
+          final Map<String, double> balances = {};
+          if (balancesList != null) {
+            for (var item in balancesList) {
+              final asset = item['asset'].toString().toUpperCase();
+              final free = double.tryParse(item['free'].toString()) ?? 0.0;
+              if (free > 0) balances[asset] = free;
+            }
+          }
+          return balances;
+        }
+      }
+    } catch (e) {
+      // Ignored
+    }
+    return {};
+  }
+
   Future<List<Map<String, dynamic>>> fetchFills({
     required String symbol,
     required String apiKey,
@@ -132,15 +170,12 @@ class BingxService {
               }
             }
           } else {
-            print('BingX API warning: ${root['msg']}');
             break;
           }
         } else {
-          print('BingX API HTTP error: ${response.statusCode} | ${response.body}');
           break;
         }
       } catch (e) {
-        print('Error fetching BingX fills block: $e');
         break;
       }
 

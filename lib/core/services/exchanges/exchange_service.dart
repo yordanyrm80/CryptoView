@@ -24,7 +24,6 @@ class ExchangeService {
     return [];
   }
 
-  // Backwards compatibility methods
   Future<List<Map<String, dynamic>>> fetchBinanceKlines(String symbol, String interval, {int limit = 150}) =>
       _binance.fetchKlines(symbol, interval, limit: limit);
 
@@ -45,6 +44,34 @@ class ExchangeService {
       return await _bingx.fetchPrices(symbols);
     }
     return {for (var s in symbols) s: 0.0};
+  }
+
+  /// Fetch private balances for specified exchange
+  Future<Map<String, double>> fetchBalances({
+    required String exchange,
+    required String apiKey,
+    required String apiSecret,
+    String? apiPassphrase,
+  }) async {
+    final ex = exchange.toLowerCase();
+    if (ex == 'kucoin') {
+      return await _kucoin.fetchBalances(
+        apiKey: apiKey,
+        apiSecret: apiSecret,
+        apiPassphrase: apiPassphrase ?? '',
+      );
+    } else if (ex == 'binance') {
+      return await _binance.fetchBalances(
+        apiKey: apiKey,
+        apiSecret: apiSecret,
+      );
+    } else if (ex == 'bingx') {
+      return await _bingx.fetchBalances(
+        apiKey: apiKey,
+        apiSecret: apiSecret,
+      );
+    }
+    return {};
   }
 
   /// Fetch private fills from KuCoin

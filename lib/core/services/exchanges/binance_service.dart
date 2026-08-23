@@ -28,7 +28,6 @@ class BinanceService {
         throw Exception('Failed to load Binance candles: ${response.statusCode}');
       }
     } catch (e) {
-      print('Error fetching Binance klines: $e');
       return [];
     }
   }
@@ -52,9 +51,49 @@ class BinanceService {
         }
       }
     } catch (e) {
-      print('Error fetching Binance prices: $e');
+      // Ignored
     }
     return priceMap;
+  }
+
+  /// Fetch private balances from Binance
+  Future<Map<String, double>> fetchBalances({
+    required String apiKey,
+    required String apiSecret,
+  }) async {
+    final timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+    final queryParams = 'recvWindow=5000&timestamp=$timestamp';
+    final key = utf8.encode(apiSecret);
+    final hmac = Hmac(sha256, key);
+    final digest = hmac.convert(utf8.encode(queryParams));
+    final signature = digest.toString();
+    final url = Uri.parse('https://api.binance.com/api/v3/account?$queryParams&signature=$signature');
+
+    try {
+      final response = await http.get(
+        url,
+        headers: {
+          'X-MBX-APIKEY': apiKey,
+          'Content-Type': 'application/json',
+        },
+      );
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        final List<dynamic>? balancesList = data['balances'];
+        final Map<String, double> balances = {};
+        if (balancesList != null) {
+          for (var item in balancesList) {
+            final asset = item['asset'].toString().toUpperCase();
+            final free = double.tryParse(item['free'].toString()) ?? 0.0;
+            if (free > 0) balances[asset] = free;
+          }
+        }
+        return balances;
+      }
+    } catch (e) {
+      // Ignored
+    }
+    return {};
   }
 
   /// Fetch private transaction history (myTrades) from Binance
@@ -110,11 +149,9 @@ class BinanceService {
             });
           }
         } else {
-          print('Binance API HTTP error: ${response.statusCode} | ${response.body}');
           break;
         }
       } catch (e) {
-        print('Error fetching Binance fills block: $e');
         break;
       }
 
