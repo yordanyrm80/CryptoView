@@ -256,6 +256,13 @@ class _ChartScreenState extends State<ChartScreen> {
           .toList();
 
       for (var buy in activeBuys) {
+        String pnlStr = '';
+        if (currentPrice != null && currentPrice > 0) {
+          final diffPct = ((currentPrice - buy.price) / buy.price) * 100;
+          final sign = diffPct >= 0 ? '+' : '';
+          pnlStr = ' · $sign${diffPct.toStringAsFixed(1)}%';
+        }
+
         plotBands.add(
           PlotBand(
             isVisible: true,
@@ -264,7 +271,7 @@ class _ChartScreenState extends State<ChartScreen> {
             borderColor: settingsProvider.buyLineColor,
             borderWidth: 1.5,
             dashArray: const <double>[3, 3],
-            text: '  COMPRA: \$${buy.price.toStringAsFixed(2)} (${buy.amount.toStringAsFixed(4)} tokens)',
+            text: '  COMPRA: \$${buy.price.toStringAsFixed(2)} (${buy.amount.toStringAsFixed(4)} tokens$pnlStr)',
             textStyle: TextStyle(color: settingsProvider.buyLineColor, fontSize: 10, fontWeight: FontWeight.bold),
             horizontalTextAlignment: TextAnchor.start,
             verticalTextAlignment: TextAnchor.end,
