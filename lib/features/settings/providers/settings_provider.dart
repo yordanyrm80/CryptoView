@@ -15,6 +15,9 @@ class SettingsProvider with ChangeNotifier {
   bool _showSellLines = true;
   bool _showCurrentPriceLine = true;
 
+  double _watchlistWidth = 300.0;
+  double _trackerWidth = 380.0;
+
   bool _isLoaded = false;
 
   SettingsProvider() {
@@ -28,6 +31,8 @@ class SettingsProvider with ChangeNotifier {
   bool get showBuyLines => _showBuyLines;
   bool get showSellLines => _showSellLines;
   bool get showCurrentPriceLine => _showCurrentPriceLine;
+  double get watchlistWidth => _watchlistWidth;
+  double get trackerWidth => _trackerWidth;
   bool get isLoaded => _isLoaded;
 
   Color get buyLineColor => _parseColor(_buyLineColorHex, const Color(0xFF00E676));
@@ -61,11 +66,29 @@ class SettingsProvider with ChangeNotifier {
       final showCurrentPriceStr = await db.getGeneralSetting('show_current_price_line', defaultValue: '1');
       _showCurrentPriceLine = showCurrentPriceStr == '1';
 
+      final wWidthStr = await db.getGeneralSetting('watchlist_width', defaultValue: '300.0');
+      _watchlistWidth = double.tryParse(wWidthStr ?? '300.0') ?? 300.0;
+
+      final tWidthStr = await db.getGeneralSetting('tracker_width', defaultValue: '380.0');
+      _trackerWidth = double.tryParse(tWidthStr ?? '380.0') ?? 380.0;
+
       _isLoaded = true;
       notifyListeners();
     } catch (e) {
       debugPrint('Error loading settings: $e');
     }
+  }
+
+  Future<void> setWatchlistWidth(double w) async {
+    _watchlistWidth = w.clamp(180.0, 550.0);
+    notifyListeners();
+    await DatabaseHelper.instance.setGeneralSetting('watchlist_width', _watchlistWidth.toStringAsFixed(1));
+  }
+
+  Future<void> setTrackerWidth(double w) async {
+    _trackerWidth = w.clamp(240.0, 700.0);
+    notifyListeners();
+    await DatabaseHelper.instance.setGeneralSetting('tracker_width', _trackerWidth.toStringAsFixed(1));
   }
 
   Future<void> setBuyLineColor(String hex) async {

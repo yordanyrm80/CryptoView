@@ -17,6 +17,8 @@ import 'features/exchanges/presentation/exchanges_screen.dart';
 import 'features/settings/providers/settings_provider.dart';
 import 'features/settings/presentation/settings_screen.dart';
 
+import 'core/widgets/panel_resize_handle.dart';
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -103,9 +105,10 @@ class _MainContainerState extends State<MainContainer> {
     final bool isWide = width > 950;
     final watchlistProvider = Provider.of<WatchlistProvider>(context);
     final trackerProvider = Provider.of<TrackerProvider>(context);
+    final settingsProvider = Provider.of<SettingsProvider>(context);
 
     // ==========================================
-    // 1. DESKTOP / WIDE SCREEN (Collapsible Panels)
+    // 1. DESKTOP / WIDE SCREEN (Collapsible & Resizable Panels)
     // ==========================================
     if (isWide) {
       return Scaffold(
@@ -171,11 +174,11 @@ class _MainContainerState extends State<MainContainer> {
         ),
         body: Row(
           children: [
-            // Left Sidebar: Watchlist (Desplegable / Colapsable)
+            // Left Sidebar: Watchlist (Resizable & Collapsible)
             AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeInOut,
-              width: _isWatchlistExpanded ? 320 : 44,
+              duration: const Duration(milliseconds: 150),
+              curve: Curves.easeOutCubic,
+              width: _isWatchlistExpanded ? settingsProvider.watchlistWidth : 44,
               child: _isWatchlistExpanded
                   ? WatchlistScreen(onTabChange: (_) {})
                   : Container(
@@ -207,19 +210,37 @@ class _MainContainerState extends State<MainContainer> {
                       ),
                     ),
             ),
-            // Separator
-            Container(width: 1, color: AppColors.divider),
-            // Middle: Chart Screen (Expands automatically to available space)
+            // Draggable Splitter Handle (Left: Watchlist <-> Chart)
+            if (_isWatchlistExpanded)
+              PanelResizeHandle(
+                tooltip: 'Arrastra para ajustar el ancho de la lista de monedas (Doble clic para plegar)',
+                onDeltaDrag: (delta) {
+                  settingsProvider.setWatchlistWidth(settingsProvider.watchlistWidth + delta);
+                },
+                onDoubleTap: () => setState(() => _isWatchlistExpanded = false),
+              )
+            else
+              Container(width: 1, color: AppColors.divider),
+            // Middle: Chart Screen (Expands dynamically to available space)
             const Expanded(
               child: ChartScreen(),
             ),
-            // Separator
-            Container(width: 1, color: AppColors.divider),
-            // Right Sidebar: Tracker/Operations (Desplegable / Colapsable)
+            // Draggable Splitter Handle (Right: Chart <-> Tracker / Diario)
+            if (_isTrackerExpanded)
+              PanelResizeHandle(
+                tooltip: 'Arrastra para ajustar el ancho del diario y casamientos (Doble clic para plegar)',
+                onDeltaDrag: (delta) {
+                  settingsProvider.setTrackerWidth(settingsProvider.trackerWidth - delta);
+                },
+                onDoubleTap: () => setState(() => _isTrackerExpanded = false),
+              )
+            else
+              Container(width: 1, color: AppColors.divider),
+            // Right Sidebar: Tracker/Operations (Resizable & Collapsible)
             AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeInOut,
-              width: _isTrackerExpanded ? 370 : 44,
+              duration: const Duration(milliseconds: 150),
+              curve: Curves.easeOutCubic,
+              width: _isTrackerExpanded ? settingsProvider.trackerWidth : 44,
               child: _isTrackerExpanded
                   ? const TrackerScreen()
                   : Container(
