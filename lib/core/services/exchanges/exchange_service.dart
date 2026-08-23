@@ -81,12 +81,14 @@ class ExchangeService {
     required String apiSecret,
     required String apiPassphrase,
     required DateTime startAt,
+    void Function(double progress, String statusMessage, int foundCount)? onProgress,
   }) => _kucoin.fetchFills(
     symbol: symbol,
     apiKey: apiKey,
     apiSecret: apiSecret,
     apiPassphrase: apiPassphrase,
     startAt: startAt,
+    onProgress: onProgress,
   );
 
   /// Fetch private fills from Binance
@@ -95,11 +97,13 @@ class ExchangeService {
     required String apiKey,
     required String apiSecret,
     required DateTime startAt,
+    void Function(double progress, String statusMessage, int foundCount)? onProgress,
   }) => _binance.fetchFills(
     symbol: symbol,
     apiKey: apiKey,
     apiSecret: apiSecret,
     startAt: startAt,
+    onProgress: onProgress,
   );
 
   /// Fetch private fills from BingX
@@ -108,10 +112,12 @@ class ExchangeService {
     required String apiKey,
     required String apiSecret,
     required DateTime startAt,
+    void Function(double progress, String statusMessage, int foundCount)? onProgress,
   }) => _bingx.fetchFills(
     symbol: symbol,
     apiKey: apiKey,
     apiSecret: apiSecret,
     startAt: startAt,
+    onProgress: onProgress,
   );
 }

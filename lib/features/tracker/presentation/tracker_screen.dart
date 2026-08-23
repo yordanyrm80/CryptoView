@@ -188,11 +188,11 @@ class _TrackerScreenState extends State<TrackerScreen> with SingleTickerProvider
             onPressed: _showApiConfigDialog,
           ),
           IconButton(
-            icon: _isSyncing
+            icon: (trackerProvider.isImporting || _isSyncing)
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary)))
                 : const Icon(Icons.cloud_sync_outlined),
-            tooltip: 'Sincronizar Historial vía API',
-            onPressed: _isSyncing ? null : _syncFromApi,
+            tooltip: 'Sincronizar Historial vía API (Hasta 2 años)',
+            onPressed: (trackerProvider.isImporting || _isSyncing) ? null : _syncFromApi,
           ),
         ],
         bottom: TabBar(
@@ -214,6 +214,75 @@ class _TrackerScreenState extends State<TrackerScreen> with SingleTickerProvider
             provider: trackerProvider,
             onRefreshBalance: () => trackerProvider.fetchLiveBalance(watchlistProvider.currentExchange),
           ),
+          if (trackerProvider.isImporting)
+            Container(
+              margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.primary.withValues(alpha: 0.5)),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 2)),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Sincronizando Historial (${(trackerProvider.importProgress * 100).toInt()}%)',
+                            style: const TextStyle(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        '${trackerProvider.importFoundCount} ops encontradas',
+                        style: const TextStyle(
+                          color: AppColors.bull,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: trackerProvider.importProgress > 0 ? trackerProvider.importProgress : null,
+                      backgroundColor: AppColors.card,
+                      valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+                      minHeight: 5,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    trackerProvider.importStatusMessage,
+                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
           Expanded(
             child: TabBarView(
               controller: _tabController,

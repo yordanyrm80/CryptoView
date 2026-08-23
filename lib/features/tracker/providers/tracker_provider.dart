@@ -11,6 +11,12 @@ class TrackerProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _isFetchingBalance = false;
 
+  // Import progress state
+  bool _isImporting = false;
+  double _importProgress = 0.0;
+  String _importStatusMessage = '';
+  int _importFoundCount = 0;
+
   // Filter state
   bool _filterOnlyCurrentSymbol = true;
   String _activeSymbol = 'ETH/USDT';
@@ -21,6 +27,10 @@ class TrackerProvider extends ChangeNotifier {
   Map<String, double> get exchangeBalances => _exchangeBalances;
   bool get isLoading => _isLoading;
   bool get isFetchingBalance => _isFetchingBalance;
+  bool get isImporting => _isImporting;
+  double get importProgress => _importProgress;
+  String get importStatusMessage => _importStatusMessage;
+  int get importFoundCount => _importFoundCount;
   bool get filterOnlyCurrentSymbol => _filterOnlyCurrentSymbol;
   String get activeSymbol => _activeSymbol;
   String get activeExchange => _activeExchange;
@@ -317,97 +327,124 @@ class TrackerProvider extends ChangeNotifier {
     final apiPassphrase = credentials['api_passphrase'] as String? ?? '';
 
     final now = DateTime.now();
-    final oneYearAgo = now.subtract(const Duration(days: 365));
+    // Maximum historical lookback: 730 days (2 years)
+    final twoYearsAgo = now.subtract(const Duration(days: 730));
     DateTime? lastSync = await DatabaseHelper.instance.getLastSyncDate(exchange, symbol);
 
-    if (lastSync == null || lastSync.isBefore(oneYearAgo)) {
-      lastSync = oneYearAgo;
+    if (lastSync == null || lastSync.isBefore(twoYearsAgo)) {
+      lastSync = twoYearsAgo;
     }
 
-    List<Map<String, dynamic>> fills = [];
+    _isImporting = true;
+    _importProgress = 0.0;
+    _importStatusMessage = 'Iniciando consulta histórica en $exchange...';
+    _importFoundCount = 0;
+    notifyListeners();
 
-    if (exchange.toLowerCase() == 'kucoin') {
-      fills = await ExchangeService.instance.fetchKucoinFills(
-        symbol: symbol,
-        apiKey: apiKey,
-        apiSecret: apiSecret,
-        apiPassphrase: apiPassphrase,
-        startAt: lastSync,
-      );
-    } else if (exchange.toLowerCase() == 'binance') {
-      fills = await ExchangeService.instance.fetchBinanceFills(
-        symbol: symbol,
-        apiKey: apiKey,
-        apiSecret: apiSecret,
-        startAt: lastSync,
-      );
-    } else if (exchange.toLowerCase() == 'bingx') {
-      fills = await ExchangeService.instance.fetchBingXFills(
-        symbol: symbol,
-        apiKey: apiKey,
-        apiSecret: apiSecret,
-        startAt: lastSync,
-      );
-    } else {
-      throw Exception('Exchange $exchange no soportado.');
-    }
+    try {
+      List<Map<String, dynamic>> fills = [];
 
-    if (fills.isEmpty) {
-      await DatabaseHelper.instance.updateLastSyncDate(exchange, symbol, now);
-      await fetchLiveBalance(exchange);
-      return 0;
-    }
-
-    final db = await DatabaseHelper.instance.database;
-    final existingTxData = await db.query(
-      'transactions',
-      where: 'exchange = ? AND symbol = ?',
-      whereArgs: [exchange, symbol],
-    );
-
-    final existingKeys = existingTxData.map((row) {
-      final type = row['type'] as String;
-      final price = (row['price'] as num).toDouble();
-      final amount = (row['amount'] as num).toDouble();
-      final fee = (row['fee'] as num).toDouble();
-      final dateStr = row['date'] as String;
-      
-      final parsedDate = DateTime.parse(dateStr).toIso8601String();
-      return '${symbol}_${type}_${price}_${amount}_${fee}_$parsedDate';
-    }).toSet();
-
-    int importedCount = 0;
-
-    for (var fill in fills) {
-      final type = fill['side'] == 'buy' ? 'buy' : 'sell';
-      final price = fill['price'] as double;
-      final amount = fill['amount'] as double;
-      final fee = fill['fee'] as double;
-      final createdAtMs = fill['createdAt'] as int;
-      final date = DateTime.fromMillisecondsSinceEpoch(createdAtMs);
-      
-      final key = '${symbol}_${type}_${price}_${amount}_${fee}_${date.toIso8601String()}';
-
-      if (!existingKeys.contains(key)) {
-        final tx = TransactionModel(
-          exchange: exchange,
-          symbol: symbol,
-          type: type,
-          price: price,
-          amount: amount,
-          fee: fee,
-          date: date,
-        );
-
-        await DatabaseHelper.instance.insertTransaction(tx.toMap());
-        importedCount++;
+      void handleProgress(double progress, String statusMessage, int foundCount) {
+        _importProgress = progress;
+        _importStatusMessage = statusMessage;
+        _importFoundCount = foundCount;
+        notifyListeners();
       }
+
+      if (exchange.toLowerCase() == 'kucoin') {
+        fills = await ExchangeService.instance.fetchKucoinFills(
+          symbol: symbol,
+          apiKey: apiKey,
+          apiSecret: apiSecret,
+          apiPassphrase: apiPassphrase,
+          startAt: lastSync,
+          onProgress: handleProgress,
+        );
+      } else if (exchange.toLowerCase() == 'binance') {
+        fills = await ExchangeService.instance.fetchBinanceFills(
+          symbol: symbol,
+          apiKey: apiKey,
+          apiSecret: apiSecret,
+          startAt: lastSync,
+          onProgress: handleProgress,
+        );
+      } else if (exchange.toLowerCase() == 'bingx') {
+        fills = await ExchangeService.instance.fetchBingXFills(
+          symbol: symbol,
+          apiKey: apiKey,
+          apiSecret: apiSecret,
+          startAt: lastSync,
+          onProgress: handleProgress,
+        );
+      } else {
+        throw Exception('Exchange $exchange no soportado.');
+      }
+
+      _importStatusMessage = 'Procesando ${fills.length} operaciones encontradas...';
+      _importProgress = 0.95;
+      notifyListeners();
+
+      if (fills.isEmpty) {
+        await DatabaseHelper.instance.updateLastSyncDate(exchange, symbol, now);
+        await fetchLiveBalance(exchange);
+        return 0;
+      }
+
+      final db = await DatabaseHelper.instance.database;
+      final existingTxData = await db.query(
+        'transactions',
+        where: 'exchange = ? AND symbol = ?',
+        whereArgs: [exchange, symbol],
+      );
+
+      final existingKeys = existingTxData.map((row) {
+        final type = row['type'] as String;
+        final price = (row['price'] as num).toDouble();
+        final amount = (row['amount'] as num).toDouble();
+        final fee = (row['fee'] as num).toDouble();
+        final dateStr = row['date'] as String;
+        
+        final parsedDate = DateTime.parse(dateStr).toIso8601String();
+        return '${symbol}_${type}_${price}_${amount}_${fee}_$parsedDate';
+      }).toSet();
+
+      int importedCount = 0;
+
+      for (var fill in fills) {
+        final type = fill['side'] == 'buy' ? 'buy' : 'sell';
+        final price = fill['price'] as double;
+        final amount = fill['amount'] as double;
+        final fee = fill['fee'] as double;
+        final createdAtMs = fill['createdAt'] as int;
+        final date = DateTime.fromMillisecondsSinceEpoch(createdAtMs);
+        
+        final key = '${symbol}_${type}_${price}_${amount}_${fee}_${date.toIso8601String()}';
+
+        if (!existingKeys.contains(key)) {
+          final tx = TransactionModel(
+            exchange: exchange,
+            symbol: symbol,
+            type: type,
+            price: price,
+            amount: amount,
+            fee: fee,
+            date: date,
+          );
+
+          await DatabaseHelper.instance.insertTransaction(tx.toMap());
+          importedCount++;
+        }
+      }
+
+      await DatabaseHelper.instance.updateLastSyncDate(exchange, symbol, now);
+      await loadData();
+      await fetchLiveBalance(exchange);
+
+      return importedCount;
+    } finally {
+      _isImporting = false;
+      _importProgress = 1.0;
+      notifyListeners();
     }
-
-    await DatabaseHelper.instance.updateLastSyncDate(exchange, symbol, now);
-    await loadData();
-    await fetchLiveBalance(exchange);
-
-    return importedCount;
   }
 }

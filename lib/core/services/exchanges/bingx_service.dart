@@ -119,16 +119,29 @@ class BingxService {
     required String apiKey,
     required String apiSecret,
     required DateTime startAt,
+    void Function(double progress, String statusMessage, int foundCount)? onProgress,
   }) async {
     final formattedSymbol = symbol.replaceAll('/', '-').toUpperCase();
     final now = DateTime.now();
     final List<Map<String, dynamic>> allFills = [];
     DateTime currentEnd = now;
 
+    final totalSpanDays = now.difference(startAt).inDays;
+    final totalChunks = (totalSpanDays / 30.0).ceil().clamp(1, 100);
+    int completedChunks = 0;
+
     while (currentEnd.isAfter(startAt)) {
       DateTime currentStart = currentEnd.subtract(const Duration(days: 30));
       if (currentStart.isBefore(startAt)) {
         currentStart = startAt;
+      }
+
+      completedChunks++;
+      final progress = (completedChunks / totalChunks).clamp(0.0, 1.0);
+      final startLabel = '${currentStart.day}/${currentStart.month}/${currentStart.year}';
+      final endLabel = '${currentEnd.day}/${currentEnd.month}/${currentEnd.year}';
+      if (onProgress != null) {
+        onProgress(progress, 'BingX: Consultando $startLabel al $endLabel ($completedChunks/$totalChunks)', allFills.length);
       }
 
       final startMs = currentStart.millisecondsSinceEpoch;
@@ -180,7 +193,7 @@ class BingxService {
       }
 
       currentEnd = currentStart;
-      await Future.delayed(const Duration(milliseconds: 200));
+      await Future.delayed(const Duration(milliseconds: 150));
     }
 
     return allFills;

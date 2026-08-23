@@ -150,16 +150,29 @@ class KucoinService {
     required String apiSecret,
     required String apiPassphrase,
     required DateTime startAt,
+    void Function(double progress, String statusMessage, int foundCount)? onProgress,
   }) async {
     final formattedSymbol = _formatSymbol(symbol);
     final now = DateTime.now();
     final List<Map<String, dynamic>> allFills = [];
     DateTime currentEnd = now;
 
+    final totalSpanDays = now.difference(startAt).inDays;
+    final totalChunks = (totalSpanDays / 7.0).ceil().clamp(1, 200);
+    int completedChunks = 0;
+
     while (currentEnd.isAfter(startAt)) {
       DateTime currentStart = currentEnd.subtract(const Duration(days: 7));
       if (currentStart.isBefore(startAt)) {
         currentStart = startAt;
+      }
+
+      completedChunks++;
+      final progress = (completedChunks / totalChunks).clamp(0.0, 1.0);
+      final startLabel = '${currentStart.day}/${currentStart.month}/${currentStart.year}';
+      final endLabel = '${currentEnd.day}/${currentEnd.month}/${currentEnd.year}';
+      if (onProgress != null) {
+        onProgress(progress, 'KuCoin: Consultando $startLabel al $endLabel ($completedChunks/$totalChunks)', allFills.length);
       }
 
       final startMs = currentStart.millisecondsSinceEpoch;
@@ -216,7 +229,7 @@ class KucoinService {
       }
 
       currentEnd = currentStart;
-      await Future.delayed(const Duration(milliseconds: 200));
+      await Future.delayed(const Duration(milliseconds: 150));
     }
 
     final Map<String, List<Map<String, dynamic>>> grouped = {};
