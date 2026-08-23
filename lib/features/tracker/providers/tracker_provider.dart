@@ -317,11 +317,11 @@ class TrackerProvider extends ChangeNotifier {
     final apiPassphrase = credentials['api_passphrase'] as String? ?? '';
 
     final now = DateTime.now();
-    final ninetyDaysAgo = now.subtract(const Duration(days: 90));
+    final oneYearAgo = now.subtract(const Duration(days: 365));
     DateTime? lastSync = await DatabaseHelper.instance.getLastSyncDate(exchange, symbol);
 
-    if (lastSync == null || lastSync.isBefore(ninetyDaysAgo)) {
-      lastSync = ninetyDaysAgo;
+    if (lastSync == null || lastSync.isBefore(oneYearAgo)) {
+      lastSync = oneYearAgo;
     }
 
     List<Map<String, dynamic>> fills = [];
