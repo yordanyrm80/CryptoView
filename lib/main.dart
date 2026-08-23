@@ -12,6 +12,7 @@ import 'features/tracker/providers/tracker_provider.dart';
 import 'features/watchlist/presentation/watchlist_screen.dart';
 import 'features/chart/presentation/chart_screen.dart';
 import 'features/tracker/presentation/tracker_screen.dart';
+import 'features/exchanges/presentation/exchanges_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -66,6 +67,7 @@ class _MainContainerState extends State<MainContainer> {
       WatchlistScreen(onTabChange: _onTabChange),
       const ChartScreen(),
       const TrackerScreen(),
+      const ExchangesScreen(),
     ];
   }
 
@@ -73,6 +75,12 @@ class _MainContainerState extends State<MainContainer> {
     setState(() {
       _currentIndex = index;
     });
+  }
+
+  void _showExchangesModal() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const ExchangesScreen()),
+    );
   }
 
   @override
@@ -83,6 +91,35 @@ class _MainContainerState extends State<MainContainer> {
     if (isWide) {
       return Scaffold(
         backgroundColor: AppColors.background,
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(42),
+          child: Container(
+            color: AppColors.card,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            alignment: Alignment.centerRight,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.candlestick_chart, color: AppColors.primary, size: 18),
+                    SizedBox(width: 8),
+                    Text('CryptoView Professional Desktop', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
+                  ],
+                ),
+                TextButton.icon(
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  ),
+                  icon: const Icon(Icons.currency_exchange, size: 16),
+                  label: const Text('Exchanges & Sincronización', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  onPressed: _showExchangesModal,
+                ),
+              ],
+            ),
+          ),
+        ),
         body: Row(
           children: [
             // Left Sidebar: Watchlist
@@ -121,6 +158,10 @@ class _MainContainerState extends State<MainContainer> {
         ),
         child: BottomNavigationBar(
           currentIndex: _currentIndex,
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: AppColors.card,
+          selectedItemColor: AppColors.primary,
+          unselectedItemColor: AppColors.textSecondary,
           onTap: (index) {
             setState(() {
               _currentIndex = index;
@@ -141,6 +182,11 @@ class _MainContainerState extends State<MainContainer> {
               icon: Icon(Icons.account_balance_wallet_outlined),
               activeIcon: Icon(Icons.account_balance_wallet, color: AppColors.primary),
               label: 'Diario',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.currency_exchange),
+              activeIcon: Icon(Icons.currency_exchange, color: AppColors.primary),
+              label: 'Exchanges',
             ),
           ],
         ),

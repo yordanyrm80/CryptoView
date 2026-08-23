@@ -316,7 +316,25 @@ class TrackerProvider extends ChangeNotifier {
 
   // --- Import transactions from Exchange ---
 
-  Future<int> importTransactionsForSymbol(String exchange, String symbol) async {
+  // --- Default Buy Amount Settings ---
+
+  Future<double> getDefaultBuyAmount(String exchange) async {
+    return await DatabaseHelper.instance.getDefaultBuyAmount(exchange);
+  }
+
+  Future<void> setDefaultBuyAmount(String exchange, double amount) async {
+    await DatabaseHelper.instance.setDefaultBuyAmount(exchange, amount);
+    notifyListeners();
+  }
+
+  // --- Import transactions from Exchange ---
+
+  Future<int> importTransactionsForSymbol(
+    String exchange,
+    String symbol, {
+    int lookbackDays = 730,
+    bool updateProviderState = true,
+  }) async {
     final credentials = await getCredentials(exchange);
     if (credentials == null) {
       throw Exception('No se encontraron credenciales de API para $exchange guardadas.');
@@ -327,28 +345,31 @@ class TrackerProvider extends ChangeNotifier {
     final apiPassphrase = credentials['api_passphrase'] as String? ?? '';
 
     final now = DateTime.now();
-    // Maximum historical lookback: 730 days (2 years)
-    final twoYearsAgo = now.subtract(const Duration(days: 730));
+    final lookbackDate = now.subtract(Duration(days: lookbackDays));
     DateTime? lastSync = await DatabaseHelper.instance.getLastSyncDate(exchange, symbol);
 
-    if (lastSync == null || lastSync.isBefore(twoYearsAgo)) {
-      lastSync = twoYearsAgo;
+    if (lastSync == null || lastSync.isBefore(lookbackDate)) {
+      lastSync = lookbackDate;
     }
 
-    _isImporting = true;
-    _importProgress = 0.0;
-    _importStatusMessage = 'Iniciando consulta histórica en $exchange...';
-    _importFoundCount = 0;
-    notifyListeners();
+    if (updateProviderState) {
+      _isImporting = true;
+      _importProgress = 0.0;
+      _importStatusMessage = 'Iniciando consulta histórica en $exchange...';
+      _importFoundCount = 0;
+      notifyListeners();
+    }
 
     try {
       List<Map<String, dynamic>> fills = [];
 
       void handleProgress(double progress, String statusMessage, int foundCount) {
-        _importProgress = progress;
-        _importStatusMessage = statusMessage;
-        _importFoundCount = foundCount;
-        notifyListeners();
+        if (updateProviderState) {
+          _importProgress = progress;
+          _importStatusMessage = statusMessage;
+          _importFoundCount = foundCount;
+          notifyListeners();
+        }
       }
 
       if (exchange.toLowerCase() == 'kucoin') {
@@ -380,13 +401,14 @@ class TrackerProvider extends ChangeNotifier {
         throw Exception('Exchange $exchange no soportado.');
       }
 
-      _importStatusMessage = 'Procesando ${fills.length} operaciones encontradas...';
-      _importProgress = 0.95;
-      notifyListeners();
+      if (updateProviderState) {
+        _importStatusMessage = 'Procesando ${fills.length} operaciones encontradas en $symbol...';
+        _importProgress = 0.95;
+        notifyListeners();
+      }
 
       if (fills.isEmpty) {
         await DatabaseHelper.instance.updateLastSyncDate(exchange, symbol, now);
-        await fetchLiveBalance(exchange);
         return 0;
       }
 
@@ -437,13 +459,70 @@ class TrackerProvider extends ChangeNotifier {
       }
 
       await DatabaseHelper.instance.updateLastSyncDate(exchange, symbol, now);
+      return importedCount;
+    } finally {
+      if (updateProviderState) {
+        await loadData();
+        await fetchLiveBalance(exchange);
+        _isImporting = false;
+        _importProgress = 1.0;
+        notifyListeners();
+      }
+    }
+  }
+
+  /// Batch import for a list of favorite symbols
+  Future<int> importBatchTransactions({
+    required String exchange,
+    required List<String> symbols,
+    required int lookbackDays,
+  }) async {
+    if (symbols.isEmpty) {
+      throw Exception('No hay monedas favoritas seleccionadas para sincronizar.');
+    }
+
+    _isImporting = true;
+    _importProgress = 0.0;
+    _importStatusMessage = 'Iniciando sincronización masiva de ${symbols.length} favoritas...';
+    _importFoundCount = 0;
+    notifyListeners();
+
+    int totalImported = 0;
+
+    try {
+      for (int i = 0; i < symbols.length; i++) {
+        final symbol = symbols[i];
+        final symbolIndex = i + 1;
+        
+        _importStatusMessage = '[$symbolIndex/${symbols.length}] Sincronizando $symbol en $exchange...';
+        _importProgress = (i / symbols.length).clamp(0.0, 1.0);
+        notifyListeners();
+
+        try {
+          final count = await importTransactionsForSymbol(
+            exchange,
+            symbol,
+            lookbackDays: lookbackDays,
+            updateProviderState: false,
+          );
+          totalImported += count;
+          _importFoundCount += count;
+        } catch (e) {
+          // Log and continue to next symbol
+          print('Error sincronizando $symbol: $e');
+        }
+
+        _importProgress = ((i + 1) / symbols.length).clamp(0.0, 1.0);
+        notifyListeners();
+      }
+
       await loadData();
       await fetchLiveBalance(exchange);
-
-      return importedCount;
+      return totalImported;
     } finally {
       _isImporting = false;
       _importProgress = 1.0;
+      _importStatusMessage = 'Sincronización masiva completada: $totalImported operaciones nuevas.';
       notifyListeners();
     }
   }

@@ -1,23 +1,59 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../../../core/utils/exchange_service.dart';
+import '../../../core/database/database_helper.dart';
+import '../../../core/services/exchanges/exchange_service.dart';
 
 class WatchlistProvider extends ChangeNotifier {
-  String _currentExchange = 'Binance';
-  String _selectedSymbol = 'BTC/USDT';
-  List<String> _symbols = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'XRP/USDT', 'ADA/USDT'];
-  Map<String, double> _prices = {};
+  String _currentExchange = 'KuCoin';
+  String _selectedSymbol = 'ETH/USDT';
+  final List<String> _symbols = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'XRP/USDT', 'ADA/USDT'];
+  final Set<String> _favoriteSymbols = {'BTC/USDT', 'ETH/USDT'};
+  final Map<String, double> _prices = {};
   bool _isLoading = false;
   Timer? _pollingTimer;
 
   String get currentExchange => _currentExchange;
   String get selectedSymbol => _selectedSymbol;
   List<String> get symbols => _symbols;
+  Set<String> get favoriteSymbolsSet => _favoriteSymbols;
+  List<String> get favoriteSymbols => _symbols.where((s) => _favoriteSymbols.contains(s)).toList();
   Map<String, double> get prices => _prices;
   bool get isLoading => _isLoading;
 
   WatchlistProvider() {
+    _loadFavorites();
     startPricePolling();
+  }
+
+  Future<void> _loadFavorites() async {
+    try {
+      final saved = await DatabaseHelper.instance.queryFavorites();
+      if (saved.isNotEmpty) {
+        _favoriteSymbols.clear();
+        _favoriteSymbols.addAll(saved);
+        notifyListeners();
+      } else {
+        // Seed default favorites
+        for (var s in ['BTC/USDT', 'ETH/USDT']) {
+          await DatabaseHelper.instance.addFavorite(s);
+        }
+      }
+    } catch (e) {
+      // Ignored
+    }
+  }
+
+  bool isFavorite(String symbol) => _favoriteSymbols.contains(symbol);
+
+  Future<void> toggleFavorite(String symbol) async {
+    if (_favoriteSymbols.contains(symbol)) {
+      _favoriteSymbols.remove(symbol);
+      await DatabaseHelper.instance.removeFavorite(symbol);
+    } else {
+      _favoriteSymbols.add(symbol);
+      await DatabaseHelper.instance.addFavorite(symbol);
+    }
+    notifyListeners();
   }
 
   // Set the current active exchange

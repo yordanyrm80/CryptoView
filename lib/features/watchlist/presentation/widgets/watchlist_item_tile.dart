@@ -6,7 +6,9 @@ class WatchlistItemTile extends StatelessWidget {
   final String exchange;
   final double? price;
   final bool isSelected;
+  final bool isFavorite;
   final VoidCallback onTap;
+  final VoidCallback onToggleFavorite;
   final VoidCallback onDelete;
 
   const WatchlistItemTile({
@@ -15,14 +17,16 @@ class WatchlistItemTile extends StatelessWidget {
     required this.exchange,
     required this.price,
     required this.isSelected,
+    required this.isFavorite,
     required this.onTap,
+    required this.onToggleFavorite,
     required this.onDelete,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 6),
+      margin: const EdgeInsets.symmetric(vertical: 5),
       decoration: BoxDecoration(
         color: isSelected ? AppColors.cardSelected : AppColors.surface,
         borderRadius: BorderRadius.circular(12),
@@ -32,21 +36,30 @@ class WatchlistItemTile extends StatelessWidget {
         ),
       ),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
         onTap: onTap,
+        leading: IconButton(
+          icon: Icon(
+            isFavorite ? Icons.star : Icons.star_border,
+            color: isFavorite ? Colors.amber : AppColors.textMuted,
+            size: 22,
+          ),
+          tooltip: isFavorite ? 'Quitar de Favoritas' : 'Marcar como Favorita (Para sincronizar historial)',
+          onPressed: onToggleFavorite,
+        ),
         title: Text(
           symbol,
           style: const TextStyle(
             color: AppColors.textPrimary,
             fontWeight: FontWeight.bold,
-            fontSize: 16,
+            fontSize: 15,
           ),
         ),
         subtitle: Text(
           exchange,
           style: const TextStyle(
             color: AppColors.textMuted,
-            fontSize: 12,
+            fontSize: 11,
           ),
         ),
         trailing: Row(
@@ -59,12 +72,13 @@ class WatchlistItemTile extends StatelessWidget {
               style: TextStyle(
                 color: isSelected ? AppColors.primary : AppColors.textPrimary,
                 fontWeight: FontWeight.bold,
-                fontSize: 16,
+                fontSize: 15,
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 4),
             IconButton(
-              icon: const Icon(Icons.delete_outline, color: AppColors.bear, size: 20),
+              icon: const Icon(Icons.delete_outline, color: AppColors.bear, size: 18),
+              tooltip: 'Eliminar de seguimiento',
               onPressed: onDelete,
             ),
           ],

@@ -121,17 +121,20 @@ class WatchlistScreen extends StatelessWidget {
                         final symbol = watchlistProvider.symbols[index];
                         final price = watchlistProvider.prices[symbol];
                         final isSelected = watchlistProvider.selectedSymbol == symbol;
+                        final isFavorite = watchlistProvider.isFavorite(symbol);
 
                         return WatchlistItemTile(
                           symbol: symbol,
                           exchange: watchlistProvider.currentExchange,
                           price: price,
                           isSelected: isSelected,
+                          isFavorite: isFavorite,
                           onTap: () {
                             watchlistProvider.changeSymbol(symbol);
                             chartProvider.loadChartData(watchlistProvider.currentExchange, symbol);
                             onTabChange(1);
                           },
+                          onToggleFavorite: () => watchlistProvider.toggleFavorite(symbol),
                           onDelete: () => watchlistProvider.removeSymbol(symbol),
                         );
                       },

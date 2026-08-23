@@ -37,7 +37,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -104,6 +104,21 @@ class DatabaseHelper {
         PRIMARY KEY (exchange, symbol)
       )
     ''');
+
+    // 6. Table for Favorites
+    await db.execute('''
+      CREATE TABLE favorites (
+        symbol TEXT PRIMARY KEY
+      )
+    ''');
+
+    // 7. Table for Exchange Settings (e.g. default buy amounts)
+    await db.execute('''
+      CREATE TABLE exchange_settings (
+        exchange TEXT PRIMARY KEY,
+        default_buy_amount REAL DEFAULT 100.0
+      )
+    ''');
   }
 
   Future _upgradeDB(Database db, int oldVersion, int newVersion) async {
@@ -124,6 +139,14 @@ class DatabaseHelper {
         ''');
       } catch (e) {
         print("Error creating api_sync: \$e");
+      }
+    }
+    if (oldVersion < 3) {
+      try {
+        await db.execute('CREATE TABLE IF NOT EXISTS favorites (symbol TEXT PRIMARY KEY)');
+        await db.execute('CREATE TABLE IF NOT EXISTS exchange_settings (exchange TEXT PRIMARY KEY, default_buy_amount REAL DEFAULT 100.0)');
+      } catch (e) {
+        print("Error upgrading DB to v3: \$e");
       }
     }
   }
@@ -297,6 +320,55 @@ class DatabaseHelper {
         'exchange': exchange,
         'symbol': symbol,
         'last_sync_date': date.toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  // --- Favorites DB Operations ---
+
+  Future<List<String>> queryFavorites() async {
+    final db = await instance.database;
+    final results = await db.query('favorites');
+    return results.map((row) => row['symbol'] as String).toList();
+  }
+
+  Future<void> addFavorite(String symbol) async {
+    final db = await instance.database;
+    await db.insert(
+      'favorites',
+      {'symbol': symbol},
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
+  }
+
+  Future<void> removeFavorite(String symbol) async {
+    final db = await instance.database;
+    await db.delete('favorites', where: 'symbol = ?', whereArgs: [symbol]);
+  }
+
+  // --- Exchange Settings DB Operations ---
+
+  Future<double> getDefaultBuyAmount(String exchange) async {
+    final db = await instance.database;
+    final results = await db.query(
+      'exchange_settings',
+      where: 'exchange = ?',
+      whereArgs: [exchange],
+    );
+    if (results.isNotEmpty) {
+      return (results.first['default_buy_amount'] as num).toDouble();
+    }
+    return 100.0;
+  }
+
+  Future<void> setDefaultBuyAmount(String exchange, double amount) async {
+    final db = await instance.database;
+    await db.insert(
+      'exchange_settings',
+      {
+        'exchange': exchange,
+        'default_buy_amount': amount,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
