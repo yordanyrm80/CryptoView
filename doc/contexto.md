@@ -20,7 +20,52 @@ Este archivo sirve como referencia de contexto rápido para las herramientas, la
 
 ---
 
-## 2. Tecnologías y Librerías Core (Flutter)
+## 2. Arquitectura del Proyecto (Feature-First Modular)
+
+```
+lib/
+├── core/                           # Recursos globales y utilidades independientes de features
+│   ├── database/                   # Manejo de persistencia local (SQLite cross-platform)
+│   │   └── database_helper.dart
+│   ├── services/                   # Servicios de red, integración con APIs externas
+│   │   └── exchanges/              # Conectores modulares por Exchange
+│   │       ├── binance_service.dart
+│   │       ├── kucoin_service.dart
+│   │       ├── bingx_service.dart
+│   │       └── exchange_service.dart # Fachada unificada
+│   └── theme/                      # Sistema de diseño, tokens de color y tema global
+│       ├── app_colors.dart
+│       └── app_theme.dart
+│
+├── features/                       # Módulos funcionales de la aplicación
+│   ├── watchlist/                  # 1. Seguimiento de pares y precios
+│   │   ├── presentation/
+│   │   │   ├── widgets/            # Widgets reutilizables de Watchlist
+│   │   │   └── watchlist_screen.dart
+│   │   └── providers/              # Gestor de estado de Watchlist
+│   │
+│   ├── chart/                      # 2. Gráficos interactivos de Trading
+│   │   ├── domain/models/          # Modelos de velas, líneas y herramientas
+│   │   ├── presentation/
+│   │   │   ├── widgets/            # Barras de temporalidad, diálogos, insignias
+│   │   │   └── chart_screen.dart   # Vista principal del gráfico SfCartesianChart
+│   │   └── providers/              # Gestor de estado del gráfico y herramientas
+│   │
+│   └── tracker/                    # 3. Diario de trading y motor de casamiento
+│       ├── domain/                 # Modelos de transacciones y casamientos (PnL)
+│       │   ├── match_model.dart
+│       │   └── transaction_model.dart
+│       ├── presentation/
+│       │   ├── widgets/            # Diálogos, modales, tarjetas y hojas de detalle
+│       │   └── tracker_screen.dart # Pantalla principal del diario (3 pestañas)
+│       └── providers/              # Gestor de estado del tracker y lógica de casamiento
+│
+└── main.dart                       # Inicialización, MultiProvider y Scaffold responsivo
+```
+
+---
+
+## 3. Tecnologías y Librerías Core (Flutter)
 
 1. **Gráficos Financieros Nativos**:
    * **Paquete**: `syncfusion_flutter_charts`.
@@ -47,7 +92,7 @@ Este archivo sirve como referencia de contexto rápido para las herramientas, la
 
 ---
 
-## 3. Pruebas Realizadas y Datos de Referencia
+## 4. Pruebas Realizadas y Datos de Referencia
 
 * **Exchange Principal Probado**: **KuCoin**.
 * **Par Principal de Pruebas**: **`ETH/USDT`** (en KuCoin API se formatea como `ETH-USDT`).
@@ -60,11 +105,10 @@ Este archivo sirve como referencia de contexto rápido para las herramientas, la
 
 ---
 
-## 4. Comandos Útiles de Consola (PowerShell / CMD)
+## 5. Comandos Útiles de Consola (PowerShell / CMD)
 
 * **Ejecutar en Windows Desktop**: `flutter run -d windows`
 * **Lanzar Emulador Android**: `flutter emulators --launch invera_phone`
 * **Ejecutar en Emulador Android**: `flutter run -d invera_phone`
 * **Verificar dispositivos conectados**: `flutter devices`
 * **Limpiar y regenerar paquetes**: `flutter clean && flutter pub get`
-
