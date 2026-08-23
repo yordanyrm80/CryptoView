@@ -51,14 +51,18 @@ lib/
 │   │   │   └── chart_screen.dart   # Vista principal del gráfico SfCartesianChart
 │   │   └── providers/              # Gestor de estado del gráfico y herramientas
 │   │
-│   └── tracker/                    # 3. Diario de trading y motor de casamiento
-│       ├── domain/                 # Modelos de transacciones y casamientos (PnL)
-│       │   ├── match_model.dart
-│       │   └── transaction_model.dart
-│       ├── presentation/
-│       │   ├── widgets/            # Diálogos, modales, tarjetas y hojas de detalle
-│       │   └── tracker_screen.dart # Pantalla principal del diario (3 pestañas)
-│       └── providers/              # Gestor de estado del tracker y lógica de casamiento
+│   ├── tracker/                    # 3. Diario de trading y motor de casamiento
+│   │   ├── domain/                 # Modelos de transacciones y casamientos (PnL)
+│   │   │   ├── match_model.dart
+│   │   │   └── transaction_model.dart
+│   │   ├── presentation/
+│   │   │   ├── widgets/            # Diálogos, modales, tarjetas y hojas de detalle
+│   │   │   └── tracker_screen.dart # Pantalla principal del diario (3 pestañas)
+│   │   └── providers/              # Gestor de estado del tracker y lógica de casamiento
+│   │
+│   └── exchanges/                  # 4. Gestión de Exchanges, Favoritas y Sincronización Masiva
+│       └── presentation/
+│           └── exchanges_screen.dart # Vista dedicada de configuración, saldo y batch sync
 │
 └── main.dart                       # Inicialización, MultiProvider y Scaffold responsivo
 ```
