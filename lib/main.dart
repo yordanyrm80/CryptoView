@@ -14,6 +14,9 @@ import 'features/chart/presentation/chart_screen.dart';
 import 'features/tracker/presentation/tracker_screen.dart';
 import 'features/exchanges/presentation/exchanges_screen.dart';
 
+import 'features/settings/providers/settings_provider.dart';
+import 'features/settings/presentation/settings_screen.dart';
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -29,6 +32,7 @@ void main() {
         ChangeNotifierProvider(create: (_) => WatchlistProvider()),
         ChangeNotifierProvider(create: (_) => ChartProvider()),
         ChangeNotifierProvider(create: (_) => TrackerProvider()),
+        ChangeNotifierProvider(create: (_) => SettingsProvider()),
       ],
       child: const MyApp(),
     ),
@@ -66,6 +70,12 @@ class _MainContainerState extends State<MainContainer> {
   void _showExchangesModal() {
     Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const ExchangesScreen()),
+    );
+  }
+
+  void _showSettingsModal() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const SettingsScreen()),
     );
   }
 
@@ -137,7 +147,13 @@ class _MainContainerState extends State<MainContainer> {
                       label: const Text('Exchanges & Sincronización', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                       onPressed: _showExchangesModal,
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
+                    IconButton(
+                      icon: const Icon(Icons.settings, color: AppColors.primary, size: 20),
+                      tooltip: 'Configuración General y Colores',
+                      onPressed: _showSettingsModal,
+                    ),
+                    const SizedBox(width: 6),
                     IconButton(
                       icon: Icon(
                         _isTrackerExpanded ? Icons.view_sidebar : Icons.view_sidebar_outlined,
@@ -268,9 +284,21 @@ class _MainContainerState extends State<MainContainer> {
                         Text('Lista de Monedas', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
                       ],
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.close, color: AppColors.textSecondary, size: 20),
-                      onPressed: () => Navigator.pop(context),
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.settings, color: AppColors.primary, size: 20),
+                          tooltip: 'Configuración General y Colores',
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _showSettingsModal();
+                          },
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: AppColors.textSecondary, size: 20),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
                     ),
                   ],
                 ),

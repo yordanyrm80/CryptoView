@@ -37,7 +37,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -119,6 +119,14 @@ class DatabaseHelper {
         default_buy_amount REAL DEFAULT 100.0
       )
     ''');
+
+    // 8. Table for General App Settings (Key-Value)
+    await db.execute('''
+      CREATE TABLE general_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''');
   }
 
   Future _upgradeDB(Database db, int oldVersion, int newVersion) async {
@@ -149,6 +157,47 @@ class DatabaseHelper {
         print("Error upgrading DB to v3: \$e");
       }
     }
+    if (oldVersion < 4) {
+      try {
+        await db.execute('CREATE TABLE IF NOT EXISTS general_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+      } catch (e) {
+        print("Error upgrading DB to v4: \$e");
+      }
+    }
+  }
+
+  // --- General Settings DB Operations ---
+
+  Future<String?> getGeneralSetting(String key, {String? defaultValue}) async {
+    final db = await instance.database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'general_settings',
+      where: 'key = ?',
+      whereArgs: [key],
+    );
+    if (maps.isNotEmpty) {
+      return maps.first['value'] as String;
+    }
+    return defaultValue;
+  }
+
+  Future<void> setGeneralSetting(String key, String value) async {
+    final db = await instance.database;
+    await db.insert(
+      'general_settings',
+      {'key': key, 'value': value},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<Map<String, String>> getAllGeneralSettings() async {
+    final db = await instance.database;
+    final List<Map<String, dynamic>> maps = await db.query('general_settings');
+    final Map<String, String> result = {};
+    for (var m in maps) {
+      result[m['key'] as String] = m['value'] as String;
+    }
+    return result;
   }
 
   // --- Transactions DB Operations ---

@@ -9,6 +9,8 @@ import '../providers/chart_provider.dart';
 import '../../watchlist/providers/watchlist_provider.dart';
 import '../../tracker/providers/tracker_provider.dart';
 import '../../tracker/domain/transaction_model.dart';
+import '../../settings/providers/settings_provider.dart';
+import '../../settings/presentation/settings_screen.dart';
 import 'widgets/timeframe_selector_bar.dart';
 import 'widgets/chart_drawing_dialog.dart';
 import 'widgets/chart_active_tool_chip.dart';
@@ -189,6 +191,7 @@ class _ChartScreenState extends State<ChartScreen> {
     final chartProvider = Provider.of<ChartProvider>(context);
     final watchlistProvider = Provider.of<WatchlistProvider>(context);
     final trackerProvider = Provider.of<TrackerProvider>(context);
+    final settingsProvider = Provider.of<SettingsProvider>(context);
 
     final String currentSymbol = watchlistProvider.selectedSymbol;
     final String currentExchange = watchlistProvider.currentExchange;
@@ -224,26 +227,74 @@ class _ChartScreenState extends State<ChartScreen> {
       );
     }).toList();
 
-    // Automatic Purchase Lines Integration
-    final List<TransactionModel> activeBuys = trackerProvider.openBuys
-        .where((tx) => tx.symbol.toLowerCase() == currentSymbol.toLowerCase() && tx.exchange.toLowerCase() == currentExchange.toLowerCase())
-        .toList();
-
-    for (var buy in activeBuys) {
+    // 1. Current Market Price Line
+    if (settingsProvider.showCurrentPriceLine && currentPrice != null && currentPrice > 0) {
       plotBands.add(
         PlotBand(
           isVisible: true,
-          start: buy.price,
-          end: buy.price,
-          borderColor: AppColors.buyOrder,
+          start: currentPrice,
+          end: currentPrice,
+          borderColor: settingsProvider.currentPriceColor,
           borderWidth: 1.5,
-          dashArray: const <double>[3, 3],
-          text: '  COMPRA: \$${buy.price.toStringAsFixed(2)} (${buy.amount.toStringAsFixed(4)} tokens)',
-          textStyle: const TextStyle(color: AppColors.buyOrder, fontSize: 10, fontWeight: FontWeight.bold),
+          dashArray: const <double>[5, 3],
+          text: '  PRECIO: \$${currentPrice.toStringAsFixed(currentPrice < 1.0 ? 4 : 2)}',
+          textStyle: TextStyle(
+            color: settingsProvider.currentPriceColor,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+          ),
           horizontalTextAlignment: TextAnchor.start,
-          verticalTextAlignment: TextAnchor.end,
+          verticalTextAlignment: TextAnchor.middle,
         ),
       );
+    }
+
+    // 2. Automatic Purchase Lines Integration
+    if (settingsProvider.showBuyLines) {
+      final List<TransactionModel> activeBuys = trackerProvider.openBuys
+          .where((tx) => tx.symbol.toLowerCase() == currentSymbol.toLowerCase() && tx.exchange.toLowerCase() == currentExchange.toLowerCase())
+          .toList();
+
+      for (var buy in activeBuys) {
+        plotBands.add(
+          PlotBand(
+            isVisible: true,
+            start: buy.price,
+            end: buy.price,
+            borderColor: settingsProvider.buyLineColor,
+            borderWidth: 1.5,
+            dashArray: const <double>[3, 3],
+            text: '  COMPRA: \$${buy.price.toStringAsFixed(2)} (${buy.amount.toStringAsFixed(4)} tokens)',
+            textStyle: TextStyle(color: settingsProvider.buyLineColor, fontSize: 10, fontWeight: FontWeight.bold),
+            horizontalTextAlignment: TextAnchor.start,
+            verticalTextAlignment: TextAnchor.end,
+          ),
+        );
+      }
+    }
+
+    // 3. Automatic Sell Lines Integration
+    if (settingsProvider.showSellLines) {
+      final List<TransactionModel> activeSells = trackerProvider.openSells
+          .where((tx) => tx.symbol.toLowerCase() == currentSymbol.toLowerCase() && tx.exchange.toLowerCase() == currentExchange.toLowerCase())
+          .toList();
+
+      for (var sell in activeSells) {
+        plotBands.add(
+          PlotBand(
+            isVisible: true,
+            start: sell.price,
+            end: sell.price,
+            borderColor: settingsProvider.sellLineColor,
+            borderWidth: 1.5,
+            dashArray: const <double>[3, 3],
+            text: '  VENTA: \$${sell.price.toStringAsFixed(2)} (${sell.amount.toStringAsFixed(4)} tokens)',
+            textStyle: TextStyle(color: settingsProvider.sellLineColor, fontSize: 10, fontWeight: FontWeight.bold),
+            horizontalTextAlignment: TextAnchor.start,
+            verticalTextAlignment: TextAnchor.start,
+          ),
+        );
+      }
     }
 
     if (chartProvider.rulerStartPrice != null && chartProvider.rulerEndPrice == null) {
@@ -304,6 +355,16 @@ class _ChartScreenState extends State<ChartScreen> {
               chartProvider.loadChartData(currentExchange, currentSymbol);
               trackerProvider.loadData();
               watchlistProvider.fetchCurrentPrices();
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings, color: Colors.white70, size: 20),
+            tooltip: 'Configuración General y Colores',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              );
             },
           ),
         ],
