@@ -83,16 +83,19 @@ lib/
      * `drawings`: Líneas de soporte/resistencia (`price`, `color`, `label`, `exchange`, `symbol`).
      * `api_keys`: Credenciales API (`exchange`, `api_key`, `api_secret`, `api_passphrase`).
      * `api_sync`: Marcas de tiempo de última sincronización (`exchange`, `symbol`, `last_sync_date`).
+     * `favorites`: Monedas favoritas para sincronización masiva (`symbol`).
+     * `exchange_settings`: Configuraciones de compras manuales por defecto (`exchange`, `default_buy_amount`).
 
-3. **Conexión REST a Exchanges**:
+3. **Conexión REST a Exchanges y Sincronización Profunda**:
    * **Paquetes**: `http` y `crypto` (HMAC SHA256).
    * **Exchanges Integrados**:
-     * **KuCoin**: Klines públicos, tickers, balance de cuentas (`/api/v1/accounts`) y private fills (`/api/v1/fills`) con paginación iterativa en bloques de 7 días cubriendo hasta el límite máximo de retención API de 2 años (730 días) con barra de progreso en vivo.
+     * **KuCoin**: Klines públicos, tickers, balance de cuentas (`/api/v1/accounts`) y private fills (`/api/v1/fills`) con paginación robusta en bloques de 7 días cubriendo hasta el límite máximo de retención API de 2 años (730 días) con barra de progreso en vivo y agregación por `orderId`.
      * **Binance**: Klines públicos, tickers, balance de cuentas (`/api/v3/account`) y private trades (`/api/v3/myTrades`) en bloques de 30 días hasta 2 años con progreso en vivo.
      * **BingX**: Klines públicos, tickers, balance spot (`/openApi/spot/v1/account/balance`) y private trades (`/openApi/spot/v1/trade/myTrades`) en bloques de 30 días hasta 2 años con progreso en vivo.
 
-4. **Gestión de Estado**:
-   * **Paquete**: `provider` (`WatchlistProvider`, `ChartProvider`, `TrackerProvider`).
+4. **UI Responsiva con Paneles Desplegables**:
+   * **Móvil**: Gráfico a pantalla completa con Drawer lateral para la lista de monedas (Watchlist) y panel inferior deslizable (`DraggableScrollableSheet`) para el Diario de Operaciones y Casamientos con barra de métricas táctil.
+   * **Escritorio**: Layout de 3 columnas con botones de colapso rápido `[◀ / ▶]` en las barras laterales de Watchlist y Tracker.
 
 ---
 
@@ -101,6 +104,7 @@ lib/
 * **Exchange Principal Probado**: **KuCoin**.
 * **Par Principal de Pruebas**: **`ETH/USDT`** (en KuCoin API se formatea como `ETH-USDT`).
 * **Operaciones reales sincronizadas**:
+  * `BUY 0.19636 ETH/USDT @ $2,036.28` (~$400 USDT) (23-May-2026)
   * `BUY 0.2447831 ETH/USDT @ $1,633.55` (07-Jun-2026)
   * `SELL 0.24478 ETH/USDT @ $1,772.00` (17-Jun-2026)
   * `BUY 0.2302344 ETH/USDT @ $1,739.05` (22-Jun-2026)

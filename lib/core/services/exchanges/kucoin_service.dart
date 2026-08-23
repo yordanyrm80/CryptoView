@@ -178,7 +178,7 @@ class KucoinService {
       final startMs = currentStart.millisecondsSinceEpoch;
       final endMs = currentEnd.millisecondsSinceEpoch;
       const endpoint = '/api/v1/fills';
-      final queryParams = 'endAt=$endMs&limit=100&startAt=$startMs&symbol=$formattedSymbol';
+      final queryParams = 'endAt=$endMs&pageSize=500&startAt=$startMs&symbol=$formattedSymbol';
       final requestPath = '$endpoint?$queryParams';
       final url = Uri.parse('https://api.kucoin.com$requestPath');
       final timestamp = DateTime.now().millisecondsSinceEpoch.toString();
@@ -218,18 +218,14 @@ class KucoinService {
                 });
               }
             }
-          } else {
-            break;
           }
-        } else {
-          break;
         }
       } catch (e) {
-        break;
+        // Continue to earlier chunks
       }
 
       currentEnd = currentStart;
-      await Future.delayed(const Duration(milliseconds: 150));
+      await Future.delayed(const Duration(milliseconds: 100));
     }
 
     final Map<String, List<Map<String, dynamic>>> grouped = {};

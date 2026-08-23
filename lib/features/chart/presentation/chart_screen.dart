@@ -102,6 +102,88 @@ class _ChartScreenState extends State<ChartScreen> {
     );
   }
 
+  void _showCoinSelectorModal(BuildContext context, WatchlistProvider watchlistProvider, ChartProvider chartProvider) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      builder: (_) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.star, color: Colors.amber, size: 18),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Seleccionar Moneda (${watchlistProvider.currentExchange})',
+                          style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
+                      ],
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: AppColors.textSecondary, size: 18),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(color: AppColors.border, height: 1),
+              Expanded(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: watchlistProvider.symbols.length,
+                  itemBuilder: (context, index) {
+                    final symbol = watchlistProvider.symbols[index];
+                    final price = watchlistProvider.prices[symbol];
+                    final isSelected = watchlistProvider.selectedSymbol == symbol;
+                    final isFavorite = watchlistProvider.isFavorite(symbol);
+
+                    return ListTile(
+                      leading: Icon(
+                        isFavorite ? Icons.star : Icons.star_border,
+                        color: isFavorite ? Colors.amber : AppColors.textMuted,
+                        size: 20,
+                      ),
+                      title: Text(
+                        symbol,
+                        style: TextStyle(
+                          color: isSelected ? AppColors.primary : AppColors.textPrimary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                      trailing: Text(
+                        price != null && price > 0 ? '\$${price.toStringAsFixed(price < 1 ? 4 : 2)}' : '--',
+                        style: TextStyle(
+                          color: isSelected ? AppColors.primary : AppColors.textPrimary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      selected: isSelected,
+                      selectedTileColor: AppColors.cardSelected,
+                      onTap: () {
+                        watchlistProvider.changeSymbol(symbol);
+                        chartProvider.loadChartData(watchlistProvider.currentExchange, symbol);
+                        Navigator.pop(context);
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final chartProvider = Provider.of<ChartProvider>(context);
@@ -110,6 +192,7 @@ class _ChartScreenState extends State<ChartScreen> {
 
     final String currentSymbol = watchlistProvider.selectedSymbol;
     final String currentExchange = watchlistProvider.currentExchange;
+    final double? currentPrice = watchlistProvider.prices[currentSymbol];
 
     final List<ChartData> chartData = chartProvider.candles.map<ChartData>((c) {
       return ChartData(
@@ -184,21 +267,45 @@ class _ChartScreenState extends State<ChartScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.card,
         elevation: 0,
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(currentSymbol, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 18)),
-            Text(currentExchange, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-          ],
+        title: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => _showCoinSelectorModal(context, watchlistProvider, chartProvider),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(currentSymbol, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
+                        const Icon(Icons.arrow_drop_down, color: AppColors.primary, size: 20),
+                      ],
+                    ),
+                    Text(
+                      currentPrice != null && currentPrice > 0
+                          ? '\$${currentPrice.toStringAsFixed(currentPrice < 1.0 ? 4 : 2)} · $currentExchange'
+                          : currentExchange,
+                      style: const TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
+            icon: const Icon(Icons.refresh, color: Colors.white, size: 20),
+            tooltip: 'Recargar velas y operaciones',
             onPressed: () {
               chartProvider.loadChartData(currentExchange, currentSymbol);
               trackerProvider.loadData();
+              watchlistProvider.fetchCurrentPrices();
             },
-          )
+          ),
         ],
       ),
       body: Column(

@@ -35,6 +35,9 @@ class TrackerProvider extends ChangeNotifier {
   String get activeSymbol => _activeSymbol;
   String get activeExchange => _activeExchange;
 
+  int get totalMatchesCount => _matches.length;
+  double get totalNetProfit => _matches.fold(0.0, (sum, m) => sum + m.profit);
+
   /// Helper to extract base and quote assets (e.g. 'ETH/USDT' -> base: 'ETH', quote: 'USDT')
   String get currentQuoteAsset {
     final parts = _activeSymbol.split('/');
@@ -346,11 +349,6 @@ class TrackerProvider extends ChangeNotifier {
 
     final now = DateTime.now();
     final lookbackDate = now.subtract(Duration(days: lookbackDays));
-    DateTime? lastSync = await DatabaseHelper.instance.getLastSyncDate(exchange, symbol);
-
-    if (lastSync == null || lastSync.isBefore(lookbackDate)) {
-      lastSync = lookbackDate;
-    }
 
     if (updateProviderState) {
       _isImporting = true;
@@ -378,7 +376,7 @@ class TrackerProvider extends ChangeNotifier {
           apiKey: apiKey,
           apiSecret: apiSecret,
           apiPassphrase: apiPassphrase,
-          startAt: lastSync,
+          startAt: lookbackDate,
           onProgress: handleProgress,
         );
       } else if (exchange.toLowerCase() == 'binance') {
@@ -386,7 +384,7 @@ class TrackerProvider extends ChangeNotifier {
           symbol: symbol,
           apiKey: apiKey,
           apiSecret: apiSecret,
-          startAt: lastSync,
+          startAt: lookbackDate,
           onProgress: handleProgress,
         );
       } else if (exchange.toLowerCase() == 'bingx') {
@@ -394,7 +392,7 @@ class TrackerProvider extends ChangeNotifier {
           symbol: symbol,
           apiKey: apiKey,
           apiSecret: apiSecret,
-          startAt: lastSync,
+          startAt: lookbackDate,
           onProgress: handleProgress,
         );
       } else {
