@@ -438,7 +438,7 @@ class TrackerProvider extends ChangeNotifier {
           'type': row['type'] as String,
           'price': (row['price'] as num).toDouble(),
           'amount': (row['amount'] as num).toDouble(),
-          'date': DateTime.parse(row['date'] as String),
+          'date': DateTime.parse(row['date'] as String).toUtc(),
         };
       }).toList();
 
@@ -450,17 +450,16 @@ class TrackerProvider extends ChangeNotifier {
         final amount = fill['amount'] as double;
         final fee = fill['fee'] as double;
         final createdAtMs = fill['createdAt'] as int;
-        final date = DateTime.fromMillisecondsSinceEpoch(createdAtMs);
+        final date = DateTime.fromMillisecondsSinceEpoch(createdAtMs, isUtc: true);
 
         final alreadyExists = existingTxList.any((tx) {
           if (tx['type'] != type) return false;
           final priceDiff = ((tx['price'] as double) - price).abs();
-          if (priceDiff > 0.05) return false;
+          if (priceDiff > 0.001) return false;
           final amountDiff = ((tx['amount'] as double) - amount).abs();
-          if (amountDiff > 0.0005) return false;
-          final timeDiff = (tx['date'] as DateTime).difference(date).inHours.abs();
-          if (timeDiff > 24) return false;
-          return true;
+          if (amountDiff > 0.0001) return false;
+          final txDate = (tx['date'] as DateTime).toUtc();
+          return txDate.difference(date).inSeconds.abs() <= 60;
         });
 
         if (!alreadyExists) {

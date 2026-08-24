@@ -30,7 +30,7 @@ class TransactionModel {
       'price': price,
       'amount': amount,
       'fee': fee,
-      'date': date.toIso8601String(),
+      'date': date.toUtc().toIso8601String(),
       'is_matched': isMatched ? 1 : 0,
     };
   }
@@ -44,7 +44,7 @@ class TransactionModel {
       price: (map['price'] as num).toDouble(),
       amount: (map['amount'] as num).toDouble(),
       fee: (map['fee'] as num).toDouble(),
-      date: DateTime.parse(map['date'] as String),
+      date: DateTime.parse(map['date'] as String).toUtc(),
       isMatched: map['is_matched'] == 1,
     );
   }

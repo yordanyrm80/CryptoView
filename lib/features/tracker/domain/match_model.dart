@@ -32,7 +32,7 @@ class MatchModel {
       'sell_transaction_id': sellTransactionId,
       'matched_amount': matchedAmount,
       'profit': profit,
-      'date': date.toIso8601String(),
+      'date': date.toUtc().toIso8601String(),
     };
   }
 
@@ -43,7 +43,7 @@ class MatchModel {
       sellTransactionId: (map['sell_transaction_id'] as int?) ?? 0,
       matchedAmount: (map['matched_amount'] as num).toDouble(),
       profit: (map['profit'] as num).toDouble(),
-      date: DateTime.parse((map['date'] ?? map['match_date']) as String),
+      date: DateTime.parse((map['date'] ?? map['match_date']) as String).toUtc(),
       buyPrice: map['buy_price'] != null ? (map['buy_price'] as num).toDouble() : null,
       sellPrice: map['sell_price'] != null ? (map['sell_price'] as num).toDouble() : null,
       symbol: map['symbol'] as String?,
