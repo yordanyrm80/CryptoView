@@ -111,7 +111,122 @@ class _TrackerScreenState extends State<TrackerScreen> with SingleTickerProvider
     );
   }
 
-  Future<void> _syncFromApi() async {
+  void _showSyncRangeDialog() {
+    final watchlistProvider = Provider.of<WatchlistProvider>(context, listen: false);
+    final currentExchange = watchlistProvider.currentExchange;
+    final currentSymbol = watchlistProvider.selectedSymbol;
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        title: Row(
+          children: [
+            const Icon(Icons.cloud_sync, color: AppColors.primary, size: 22),
+            const SizedBox(width: 8),
+            Text('Sincronizar $currentSymbol', style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Selecciona el período a consultar en $currentExchange:',
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 14),
+            _buildSyncRangeOption(
+              icon: Icons.flash_on,
+              title: 'Hoy (Últimas 24 horas)',
+              subtitle: 'Ideal para descargar tus operaciones del día al instante',
+              days: 1,
+            ),
+            const SizedBox(height: 8),
+            _buildSyncRangeOption(
+              icon: Icons.calendar_view_week,
+              title: 'Últimos 7 Días',
+              subtitle: 'Sincroniza la actividad de la última semana',
+              days: 7,
+            ),
+            const SizedBox(height: 8),
+            _buildSyncRangeOption(
+              icon: Icons.calendar_month,
+              title: 'Últimos 30 Días',
+              subtitle: 'Sincroniza todas las órdenes del último mes',
+              days: 30,
+            ),
+            const SizedBox(height: 8),
+            _buildSyncRangeOption(
+              icon: Icons.history,
+              title: 'Todo el Historial (Hasta 2 años)',
+              subtitle: 'Consulta histórica completa permitida por el exchange',
+              days: 730,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar', style: TextStyle(color: AppColors.textMuted)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSyncRangeOption({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required int days,
+  }) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () {
+        Navigator.pop(context);
+        _syncFromApi(lookbackDays: days);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: AppColors.primary, size: 18),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios, color: AppColors.textMuted, size: 12),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _syncFromApi({int lookbackDays = 1}) async {
     final watchlistProvider = Provider.of<WatchlistProvider>(context, listen: false);
     final trackerProvider = Provider.of<TrackerProvider>(context, listen: false);
 
@@ -121,7 +236,11 @@ class _TrackerScreenState extends State<TrackerScreen> with SingleTickerProvider
     setState(() => _isSyncing = true);
 
     try {
-      final importedCount = await trackerProvider.importTransactionsForSymbol(currentExchange, currentSymbol);
+      final importedCount = await trackerProvider.importTransactionsForSymbol(
+        currentExchange,
+        currentSymbol,
+        lookbackDays: lookbackDays,
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -188,8 +307,8 @@ class _TrackerScreenState extends State<TrackerScreen> with SingleTickerProvider
             icon: (trackerProvider.isImporting || _isSyncing)
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary)))
                 : const Icon(Icons.cloud_sync_outlined),
-            tooltip: 'Sincronizar Historial vía API (Hasta 2 años)',
-            onPressed: (trackerProvider.isImporting || _isSyncing) ? null : _syncFromApi,
+            tooltip: 'Sincronizar Historial vía API',
+            onPressed: (trackerProvider.isImporting || _isSyncing) ? null : _showSyncRangeDialog,
           ),
         ],
         bottom: TabBar(
