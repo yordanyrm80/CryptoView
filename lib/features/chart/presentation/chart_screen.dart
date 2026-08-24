@@ -16,7 +16,7 @@ import 'widgets/chart_drawing_dialog.dart';
 import 'widgets/chart_active_tool_chip.dart';
 import 'widgets/chart_toolbar.dart';
 import 'widgets/chart_drawing_list_panel.dart';
-import 'widgets/chart_layer_filter_bar.dart';
+import 'widgets/chart_layers_dialog.dart';
 import '../../orderbook/presentation/orderbook_screen.dart';
 import '../../orderbook/providers/orderbook_provider.dart';
 import '../../trading/presentation/trading_panel_screen.dart';
@@ -131,6 +131,13 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
           )
         ],
       ),
+    );
+  }
+
+  void _showChartLayersDialog(BuildContext context, SettingsProvider settingsProvider) {
+    showDialog(
+      context: context,
+      builder: (_) => ChartLayersDialog(settingsProvider: settingsProvider),
     );
   }
 
@@ -253,7 +260,7 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
               borderColor: Color(colorVal),
               borderWidth: 1.5,
               dashArray: const <double>[6, 4],
-              text: '  $label: \$${price.toStringAsFixed(2)}',
+              text: settingsProvider.showDrawingLabels ? '  $label: \$${price.toStringAsFixed(2)}' : null,
               textStyle: const TextStyle(color: AppColors.textPrimary, fontSize: 10, fontWeight: FontWeight.bold),
               horizontalTextAlignment: TextAnchor.start,
               verticalTextAlignment: TextAnchor.middle,
@@ -271,7 +278,7 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
           borderColor: settingsProvider.currentPriceColor,
           borderWidth: 1.5,
           dashArray: const <double>[5, 3],
-          text: '  PRECIO: \$${currentPrice.toStringAsFixed(currentPrice < 1.0 ? 4 : 2)}',
+          text: settingsProvider.showCurrentPriceLabel ? '  PRECIO: \$${currentPrice.toStringAsFixed(currentPrice < 1.0 ? 4 : 2)}' : null,
           textStyle: TextStyle(
             color: settingsProvider.currentPriceColor,
             fontSize: 10,
@@ -305,7 +312,7 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
             borderColor: settingsProvider.buyLineColor,
             borderWidth: 1.5,
             dashArray: const <double>[3, 3],
-            text: '  COMPRA: \$${buy.price.toStringAsFixed(2)} (${buy.amount.toStringAsFixed(4)} tokens$pnlStr)',
+            text: settingsProvider.showBuyLabels ? '  COMPRA: \$${buy.price.toStringAsFixed(2)} (${buy.amount.toStringAsFixed(4)} tokens$pnlStr)' : null,
             textStyle: TextStyle(color: settingsProvider.buyLineColor, fontSize: 10, fontWeight: FontWeight.bold),
             horizontalTextAlignment: TextAnchor.start,
             verticalTextAlignment: TextAnchor.end,
@@ -329,7 +336,7 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
             borderColor: settingsProvider.sellLineColor,
             borderWidth: 1.5,
             dashArray: const <double>[3, 3],
-            text: '  VENTA: \$${sell.price.toStringAsFixed(2)} (${sell.amount.toStringAsFixed(4)} tokens)',
+            text: settingsProvider.showSellLabels ? '  VENTA: \$${sell.price.toStringAsFixed(2)} (${sell.amount.toStringAsFixed(4)} tokens)' : null,
             textStyle: TextStyle(color: settingsProvider.sellLineColor, fontSize: 10, fontWeight: FontWeight.bold),
             horizontalTextAlignment: TextAnchor.start,
             verticalTextAlignment: TextAnchor.start,
@@ -339,32 +346,36 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
     }
 
     // 4. Active Open Orders in Exchange (KuCoin / Binance)
-    final activeOpenOrders = openOrders.where((o) =>
-        o.symbol.replaceAll('-', '').replaceAll('/', '').toUpperCase() ==
-        currentSymbol.replaceAll('-', '').replaceAll('/', '').toUpperCase());
+    if (settingsProvider.showOpenOrders) {
+      final activeOpenOrders = openOrders.where((o) =>
+          o.symbol.replaceAll('-', '').replaceAll('/', '').toUpperCase() ==
+          currentSymbol.replaceAll('-', '').replaceAll('/', '').toUpperCase());
 
-    for (var order in activeOpenOrders) {
-      final isBuyOrder = order.side == 'buy';
-      final orderColor = isBuyOrder ? const Color(0xFF00E676) : const Color(0xFFFF5252);
+      for (var order in activeOpenOrders) {
+        final isBuyOrder = order.side == 'buy';
+        final orderColor = isBuyOrder ? const Color(0xFF00E676) : const Color(0xFFFF5252);
 
-      plotBands.add(
-        PlotBand(
-          isVisible: true,
-          start: order.price,
-          end: order.price,
-          borderColor: orderColor,
-          borderWidth: 2.0,
-          dashArray: const <double>[8, 4],
-          text: '  ⏳ LÍMITE ${isBuyOrder ? "COMPRA" : "VENTA"}: \$${order.price.toStringAsFixed(order.price < 1.0 ? 4 : 2)} (${order.size.toStringAsFixed(4)})',
-          textStyle: TextStyle(
-            color: orderColor,
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
+        plotBands.add(
+          PlotBand(
+            isVisible: true,
+            start: order.price,
+            end: order.price,
+            borderColor: orderColor,
+            borderWidth: 2.0,
+            dashArray: const <double>[8, 4],
+            text: settingsProvider.showOpenOrderLabels
+                ? '  ⏳ LÍMITE ${isBuyOrder ? "COMPRA" : "VENTA"}: \$${order.price.toStringAsFixed(order.price < 1.0 ? 4 : 2)} (${order.size.toStringAsFixed(4)})'
+                : null,
+            textStyle: TextStyle(
+              color: orderColor,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+            horizontalTextAlignment: TextAnchor.start,
+            verticalTextAlignment: TextAnchor.middle,
           ),
-          horizontalTextAlignment: TextAnchor.start,
-          verticalTextAlignment: TextAnchor.middle,
-        ),
-      );
+        );
+      }
     }
 
     if (chartProvider.rulerStartPrice != null && chartProvider.rulerEndPrice == null) {
@@ -540,9 +551,7 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
           chartProvider: chartProvider,
           currentExchange: currentExchange,
           currentSymbol: currentSymbol,
-        ),
-        ChartLayerFilterBar(
-          settingsProvider: settingsProvider,
+          onOpenLayers: () => _showChartLayersDialog(context, settingsProvider),
         ),
         Expanded(
           flex: 3,

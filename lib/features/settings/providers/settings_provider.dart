@@ -12,9 +12,15 @@ class SettingsProvider with ChangeNotifier {
   String _currentPriceColorHex = defaultCurrentPriceColor;
 
   bool _showBuyLines = true;
+  bool _showBuyLabels = true;
   bool _showSellLines = true;
-  bool _showCurrentPriceLine = true;
+  bool _showSellLabels = true;
+  bool _showOpenOrders = true;
+  bool _showOpenOrderLabels = true;
   bool _showDrawings = true;
+  bool _showDrawingLabels = true;
+  bool _showCurrentPriceLine = true;
+  bool _showCurrentPriceLabel = true;
 
   double _watchlistWidth = 300.0;
   double _trackerWidth = 380.0;
@@ -30,9 +36,22 @@ class SettingsProvider with ChangeNotifier {
   String get currentPriceColorHex => _currentPriceColorHex;
 
   bool get showBuyLines => _showBuyLines;
+  bool get showBuyLabels => _showBuyLabels;
   bool get showSellLines => _showSellLines;
-  bool get showCurrentPriceLine => _showCurrentPriceLine;
+  bool get showSellLabels => _showSellLabels;
+  bool get showOpenOrders => _showOpenOrders;
+  bool get showOpenOrderLabels => _showOpenOrderLabels;
   bool get showDrawings => _showDrawings;
+  bool get showDrawingLabels => _showDrawingLabels;
+  bool get showCurrentPriceLine => _showCurrentPriceLine;
+  bool get showCurrentPriceLabel => _showCurrentPriceLabel;
+
+  bool get areAllLabelsVisible =>
+      _showBuyLabels && _showSellLabels && _showOpenOrderLabels && _showDrawingLabels && _showCurrentPriceLabel;
+
+  bool get areAllLinesVisible =>
+      _showBuyLines && _showSellLines && _showOpenOrders && _showDrawings && _showCurrentPriceLine;
+
   double get watchlistWidth => _watchlistWidth;
   double get trackerWidth => _trackerWidth;
   bool get isLoaded => _isLoaded;
@@ -59,17 +78,20 @@ class SettingsProvider with ChangeNotifier {
       _sellLineColorHex = await db.getGeneralSetting('sell_line_color', defaultValue: defaultSellLineColor) ?? defaultSellLineColor;
       _currentPriceColorHex = await db.getGeneralSetting('current_price_color', defaultValue: defaultCurrentPriceColor) ?? defaultCurrentPriceColor;
 
-      final showBuyStr = await db.getGeneralSetting('show_buy_lines', defaultValue: '1');
-      _showBuyLines = showBuyStr == '1';
+      _showBuyLines = (await db.getGeneralSetting('show_buy_lines', defaultValue: '1')) == '1';
+      _showBuyLabels = (await db.getGeneralSetting('show_buy_labels', defaultValue: '1')) == '1';
 
-      final showSellStr = await db.getGeneralSetting('show_sell_lines', defaultValue: '1');
-      _showSellLines = showSellStr == '1';
+      _showSellLines = (await db.getGeneralSetting('show_sell_lines', defaultValue: '1')) == '1';
+      _showSellLabels = (await db.getGeneralSetting('show_sell_labels', defaultValue: '1')) == '1';
 
-      final showCurrentPriceStr = await db.getGeneralSetting('show_current_price_line', defaultValue: '1');
-      _showCurrentPriceLine = showCurrentPriceStr == '1';
+      _showOpenOrders = (await db.getGeneralSetting('show_open_orders', defaultValue: '1')) == '1';
+      _showOpenOrderLabels = (await db.getGeneralSetting('show_open_order_labels', defaultValue: '1')) == '1';
 
-      final showDrawingsStr = await db.getGeneralSetting('show_drawings', defaultValue: '1');
-      _showDrawings = showDrawingsStr == '1';
+      _showDrawings = (await db.getGeneralSetting('show_drawings', defaultValue: '1')) == '1';
+      _showDrawingLabels = (await db.getGeneralSetting('show_drawing_labels', defaultValue: '1')) == '1';
+
+      _showCurrentPriceLine = (await db.getGeneralSetting('show_current_price_line', defaultValue: '1')) == '1';
+      _showCurrentPriceLabel = (await db.getGeneralSetting('show_current_price_label', defaultValue: '1')) == '1';
 
       final wWidthStr = await db.getGeneralSetting('watchlist_width', defaultValue: '300.0');
       _watchlistWidth = double.tryParse(wWidthStr ?? '300.0') ?? 300.0;
@@ -120,16 +142,34 @@ class SettingsProvider with ChangeNotifier {
     await DatabaseHelper.instance.setGeneralSetting('show_buy_lines', show ? '1' : '0');
   }
 
+  Future<void> setShowBuyLabels(bool show) async {
+    _showBuyLabels = show;
+    notifyListeners();
+    await DatabaseHelper.instance.setGeneralSetting('show_buy_labels', show ? '1' : '0');
+  }
+
   Future<void> setShowSellLines(bool show) async {
     _showSellLines = show;
     notifyListeners();
     await DatabaseHelper.instance.setGeneralSetting('show_sell_lines', show ? '1' : '0');
   }
 
-  Future<void> setShowCurrentPriceLine(bool show) async {
-    _showCurrentPriceLine = show;
+  Future<void> setShowSellLabels(bool show) async {
+    _showSellLabels = show;
     notifyListeners();
-    await DatabaseHelper.instance.setGeneralSetting('show_current_price_line', show ? '1' : '0');
+    await DatabaseHelper.instance.setGeneralSetting('show_sell_labels', show ? '1' : '0');
+  }
+
+  Future<void> setShowOpenOrders(bool show) async {
+    _showOpenOrders = show;
+    notifyListeners();
+    await DatabaseHelper.instance.setGeneralSetting('show_open_orders', show ? '1' : '0');
+  }
+
+  Future<void> setShowOpenOrderLabels(bool show) async {
+    _showOpenOrderLabels = show;
+    notifyListeners();
+    await DatabaseHelper.instance.setGeneralSetting('show_open_order_labels', show ? '1' : '0');
   }
 
   Future<void> setShowDrawings(bool show) async {
@@ -138,14 +178,74 @@ class SettingsProvider with ChangeNotifier {
     await DatabaseHelper.instance.setGeneralSetting('show_drawings', show ? '1' : '0');
   }
 
+  Future<void> setShowDrawingLabels(bool show) async {
+    _showDrawingLabels = show;
+    notifyListeners();
+    await DatabaseHelper.instance.setGeneralSetting('show_drawing_labels', show ? '1' : '0');
+  }
+
+  Future<void> setShowCurrentPriceLine(bool show) async {
+    _showCurrentPriceLine = show;
+    notifyListeners();
+    await DatabaseHelper.instance.setGeneralSetting('show_current_price_line', show ? '1' : '0');
+  }
+
+  Future<void> setShowCurrentPriceLabel(bool show) async {
+    _showCurrentPriceLabel = show;
+    notifyListeners();
+    await DatabaseHelper.instance.setGeneralSetting('show_current_price_label', show ? '1' : '0');
+  }
+
+  /// Master switch: Toggle all labels (text) ON or OFF across all line categories with 1 click
+  Future<void> toggleAllLabels(bool show) async {
+    _showBuyLabels = show;
+    _showSellLabels = show;
+    _showOpenOrderLabels = show;
+    _showDrawingLabels = show;
+    _showCurrentPriceLabel = show;
+    notifyListeners();
+
+    final db = DatabaseHelper.instance;
+    final val = show ? '1' : '0';
+    await db.setGeneralSetting('show_buy_labels', val);
+    await db.setGeneralSetting('show_sell_labels', val);
+    await db.setGeneralSetting('show_open_order_labels', val);
+    await db.setGeneralSetting('show_drawing_labels', val);
+    await db.setGeneralSetting('show_current_price_label', val);
+  }
+
+  /// Master switch: Toggle all lines ON or OFF across all categories with 1 click
+  Future<void> toggleAllLines(bool show) async {
+    _showBuyLines = show;
+    _showSellLines = show;
+    _showOpenOrders = show;
+    _showDrawings = show;
+    _showCurrentPriceLine = show;
+    notifyListeners();
+
+    final db = DatabaseHelper.instance;
+    final val = show ? '1' : '0';
+    await db.setGeneralSetting('show_buy_lines', val);
+    await db.setGeneralSetting('show_sell_lines', val);
+    await db.setGeneralSetting('show_open_orders', val);
+    await db.setGeneralSetting('show_drawings', val);
+    await db.setGeneralSetting('show_current_price_line', val);
+  }
+
   Future<void> resetToDefaults() async {
     _buyLineColorHex = defaultBuyLineColor;
     _sellLineColorHex = defaultSellLineColor;
     _currentPriceColorHex = defaultCurrentPriceColor;
     _showBuyLines = true;
+    _showBuyLabels = true;
     _showSellLines = true;
+    _showSellLabels = true;
+    _showOpenOrders = true;
+    _showOpenOrderLabels = true;
     _showCurrentPriceLine = true;
+    _showCurrentPriceLabel = true;
     _showDrawings = true;
+    _showDrawingLabels = true;
     notifyListeners();
 
     final db = DatabaseHelper.instance;
@@ -153,8 +253,14 @@ class SettingsProvider with ChangeNotifier {
     await db.setGeneralSetting('sell_line_color', defaultSellLineColor);
     await db.setGeneralSetting('current_price_color', defaultCurrentPriceColor);
     await db.setGeneralSetting('show_buy_lines', '1');
+    await db.setGeneralSetting('show_buy_labels', '1');
     await db.setGeneralSetting('show_sell_lines', '1');
+    await db.setGeneralSetting('show_sell_labels', '1');
+    await db.setGeneralSetting('show_open_orders', '1');
+    await db.setGeneralSetting('show_open_order_labels', '1');
     await db.setGeneralSetting('show_current_price_line', '1');
+    await db.setGeneralSetting('show_current_price_label', '1');
     await db.setGeneralSetting('show_drawings', '1');
+    await db.setGeneralSetting('show_drawing_labels', '1');
   }
 }
