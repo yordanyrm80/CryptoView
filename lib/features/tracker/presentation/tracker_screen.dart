@@ -111,60 +111,6 @@ class _TrackerScreenState extends State<TrackerScreen> with SingleTickerProvider
     );
   }
 
-  void _showAutoMatchConfirmDialog(TrackerProvider provider, String currentSymbol, String currentExchange) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: AppColors.border),
-        ),
-        title: const Row(
-          children: [
-            Icon(Icons.auto_awesome, color: AppColors.primary, size: 22),
-            SizedBox(width: 8),
-            Text('Auto-Casar Historial (FIFO)', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
-          ],
-        ),
-        content: Text(
-          '¿Deseas emparejar automáticamente las compras y ventas históricas en orden cronológico (First In, First Out) para $currentSymbol ($currentExchange)?\n\nEsto calculará los beneficios netos exactos de cada venta histórica.',
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancelar', style: TextStyle(color: AppColors.textMuted)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: AppColors.background,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            onPressed: () async {
-              Navigator.pop(context);
-              final count = await provider.autoMatchFIFO(symbol: currentSymbol, exchange: currentExchange);
-              if (mounted) {
-                _tabController.animateTo(0);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    backgroundColor: AppColors.bull,
-                    content: Text(count > 0
-                        ? '¡Se generaron $count nuevos casamientos automáticos!'
-                        : 'No se encontraron nuevas compras y ventas para emparejar.'),
-                  ),
-                );
-              }
-            },
-            child: const Text('Auto-Casar Ahora', style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _syncFromApi() async {
     final watchlistProvider = Provider.of<WatchlistProvider>(context, listen: false);
     final trackerProvider = Provider.of<TrackerProvider>(context, listen: false);
@@ -177,39 +123,14 @@ class _TrackerScreenState extends State<TrackerScreen> with SingleTickerProvider
     try {
       final importedCount = await trackerProvider.importTransactionsForSymbol(currentExchange, currentSymbol);
       if (mounted) {
-        if (importedCount > 0) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              backgroundColor: AppColors.bull,
-              duration: const Duration(seconds: 6),
-              content: Text('¡Se importaron $importedCount transacciones de $currentExchange!'),
-              action: SnackBarAction(
-                label: 'Auto-Casar FIFO',
-                textColor: Colors.black,
-                backgroundColor: Colors.white,
-                onPressed: () async {
-                  final matched = await trackerProvider.autoMatchFIFO(symbol: currentSymbol, exchange: currentExchange);
-                  if (mounted) {
-                    _tabController.animateTo(0);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        backgroundColor: AppColors.bull,
-                        content: Text('¡Se generaron $matched nuevos casamientos!'),
-                      ),
-                    );
-                  }
-                },
-              ),
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              backgroundColor: AppColors.bull,
-              content: Text('Historial al día. No hay nuevas órdenes en $currentSymbol.'),
-            ),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppColors.bull,
+            content: Text(importedCount > 0
+                ? '¡Se importaron $importedCount nuevas transacciones de $currentExchange!'
+                : 'Historial al día. No hay nuevas órdenes en $currentSymbol.'),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -258,15 +179,6 @@ class _TrackerScreenState extends State<TrackerScreen> with SingleTickerProvider
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.auto_awesome, color: AppColors.primary),
-            tooltip: 'Auto-Casar Historial FIFO (1 Clic)',
-            onPressed: () => _showAutoMatchConfirmDialog(
-              trackerProvider,
-              watchlistProvider.selectedSymbol,
-              watchlistProvider.currentExchange,
-            ),
-          ),
           IconButton(
             icon: const Icon(Icons.vpn_key_outlined),
             tooltip: 'Configurar API Keys',

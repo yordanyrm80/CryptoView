@@ -4,7 +4,7 @@ import '../../domain/transaction_model.dart';
 import '../../providers/tracker_provider.dart';
 import 'match_confirm_dialog.dart';
 
-class SelectMatchCandidateSheet extends StatelessWidget {
+class SelectMatchCandidateSheet extends StatefulWidget {
   final TransactionModel sourceTx;
   final TrackerProvider provider;
   final VoidCallback onMatchedSuccessfully;
@@ -15,6 +15,13 @@ class SelectMatchCandidateSheet extends StatelessWidget {
     required this.provider,
     required this.onMatchedSuccessfully,
   }) : super(key: key);
+
+  @override
+  _SelectMatchCandidateSheetState createState() => _SelectMatchCandidateSheetState();
+}
+
+class _SelectMatchCandidateSheetState extends State<SelectMatchCandidateSheet> {
+  bool _filterOnlySuggested = false;
 
   String _formatAmount(double value) {
     if (value == value.roundToDouble()) {
@@ -28,6 +35,8 @@ class SelectMatchCandidateSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final sourceTx = widget.sourceTx;
+    final provider = widget.provider;
     final isSourceBuy = sourceTx.type == 'buy';
     final targetType = isSourceBuy ? 'sell' : 'buy';
     final sourceRemaining = provider.getRemainingAmount(sourceTx);
@@ -39,8 +48,11 @@ class SelectMatchCandidateSheet extends StatelessWidget {
     final cleanSymbol = sourceTx.symbol.replaceAll('-', '/').toUpperCase();
     final cleanExchange = sourceTx.exchange.toLowerCase();
 
+    // Standard buy block configured in settings (e.g. $400 USDT)
+    final standardBuySize = provider.getBuyAmountForExchange(sourceTx.exchange);
+
     // Filter available opposite candidates
-    final candidates = provider.transactions.where((tx) {
+    final rawCandidates = provider.transactions.where((tx) {
       if (tx.id == sourceTx.id) return false;
       if (tx.type != targetType) return false;
       if (tx.symbol.replaceAll('-', '/').toUpperCase() != cleanSymbol) return false;
@@ -48,8 +60,48 @@ class SelectMatchCandidateSheet extends StatelessWidget {
       return provider.getRemainingAmount(tx) > 0.000001;
     }).toList();
 
-    // Sort by date (oldest first)
-    candidates.sort((a, b) => a.date.compareTo(b.date));
+    // Calculate proximity scores for each candidate
+    final scoredCandidates = rawCandidates.map((candidate) {
+      final candRemaining = provider.getRemainingAmount(candidate);
+      final candQuoteCost = candidate.price * candRemaining;
+      
+      // Cost proximity to configured standard buy size ($400)
+      final costDiff = (candQuoteCost - standardBuySize).abs();
+      final isNearStandardBlock = costDiff <= (standardBuySize * 0.25); // within 25% of $400 (e.g. $300-$500)
+
+      // Token quantity proximity to source
+      final tokenDiffRatio = sourceRemaining > 0 ? (candRemaining - sourceRemaining).abs() / sourceRemaining : 1.0;
+      final isSimilarTokenSize = tokenDiffRatio <= 0.20; // within 20% of token amount
+
+      // Chronological order: Did purchase occur before sale?
+      final isChronological = isSourceBuy ? candidate.date.isAfter(sourceTx.date) : candidate.date.isBefore(sourceTx.date);
+
+      // Best match flag: Near $400 block, similar token volume, and correct chronology
+      final isIdealMatch = isNearStandardBlock && isSimilarTokenSize && isChronological;
+
+      // Score (lower is better)
+      double score = 0.0;
+      score += (costDiff / standardBuySize) * 50.0;
+      score += tokenDiffRatio * 50.0;
+      if (!isChronological) score += 100.0;
+
+      return {
+        'candidate': candidate,
+        'remaining': candRemaining,
+        'quoteCost': candQuoteCost,
+        'isIdeal': isIdealMatch,
+        'isNear400': isNearStandardBlock,
+        'isSimilarSize': isSimilarTokenSize,
+        'score': score,
+      };
+    }).toList();
+
+    // Sort by best score (most relevant first)
+    scoredCandidates.sort((a, b) => (a['score'] as double).compareTo(b['score'] as double));
+
+    final filteredList = _filterOnlySuggested
+        ? scoredCandidates.where((item) => (item['isIdeal'] as bool) || (item['isNear400'] as bool)).toList()
+        : scoredCandidates;
 
     final sourceDateStr = '${sourceTx.date.day.toString().padLeft(2, '0')}/${sourceTx.date.month.toString().padLeft(2, '0')}/${sourceTx.date.year}';
 
@@ -60,7 +112,7 @@ class SelectMatchCandidateSheet extends StatelessWidget {
       ),
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.75,
+        maxHeight: MediaQuery.of(context).size.height * 0.85,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -101,7 +153,7 @@ class SelectMatchCandidateSheet extends StatelessWidget {
           ),
           const SizedBox(height: 8),
 
-          // Source Transaction Summary Card
+          // Source Transaction Card
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -165,17 +217,48 @@ class SelectMatchCandidateSheet extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
 
-          Text(
-            'Selecciona con qué ${isSourceBuy ? "VENTA" : "COMPRA"} deseas casarla (${candidates.length} disponibles):',
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
+          // Proximity & Filter Helper Bar
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Buscando compras cercanas a ~\$${standardBuySize.toStringAsFixed(0)} USDT (${filteredList.length}):',
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+              InkWell(
+                borderRadius: BorderRadius.circular(6),
+                onTap: () {
+                  setState(() {
+                    _filterOnlySuggested = !_filterOnlySuggested;
+                  });
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _filterOnlySuggested ? Icons.check_box : Icons.check_box_outline_blank,
+                        size: 14,
+                        color: AppColors.primary,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Solo ~\$${standardBuySize.toStringAsFixed(0)}',
+                        style: const TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
 
           // Candidates List
           Expanded(
-            child: candidates.isEmpty
+            child: filteredList.isEmpty
                 ? Center(
                     child: Padding(
                       padding: const EdgeInsets.all(24),
@@ -185,27 +268,33 @@ class SelectMatchCandidateSheet extends StatelessWidget {
                           const Icon(Icons.link_off, size: 44, color: AppColors.border),
                           const SizedBox(height: 10),
                           Text(
-                            'No hay ${isSourceBuy ? "ventas" : "compras"} abiertas disponibles en $cleanSymbol (${sourceTx.exchange}).',
+                            _filterOnlySuggested
+                                ? 'No hay ${isSourceBuy ? "ventas" : "compras"} cercanas a ~\$${standardBuySize.toStringAsFixed(0)} USDT.'
+                                : 'No hay ${isSourceBuy ? "ventas" : "compras"} abiertas disponibles en $cleanSymbol.',
                             textAlign: TextAlign.center,
                             style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.bold),
                           ),
-                          const SizedBox(height: 6),
-                          const Text(
-                            'Puedes sincronizar más historial vía API o registrar la operación con el botón +.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: AppColors.textMuted, fontSize: 11),
-                          ),
+                          if (_filterOnlySuggested)
+                            TextButton(
+                              onPressed: () => setState(() => _filterOnlySuggested = false),
+                              child: const Text('Mostrar todos los candidatos'),
+                            ),
                         ],
                       ),
                     ),
                   )
                 : ListView.builder(
                     physics: const BouncingScrollPhysics(),
-                    itemCount: candidates.length,
+                    itemCount: filteredList.length,
                     itemBuilder: (context, index) {
-                      final candidate = candidates[index];
-                      final candidateRemaining = provider.getRemainingAmount(candidate);
-                      final matchableQty = sourceRemaining < candidateRemaining ? sourceRemaining : candidateRemaining;
+                      final item = filteredList[index];
+                      final candidate = item['candidate'] as TransactionModel;
+                      final candRemaining = item['remaining'] as double;
+                      final candCost = item['quoteCost'] as double;
+                      final isIdeal = item['isIdeal'] as bool;
+                      final isNear400 = item['isNear400'] as bool;
+
+                      final matchableQty = sourceRemaining < candRemaining ? sourceRemaining : candRemaining;
 
                       final buyTx = isSourceBuy ? sourceTx : candidate;
                       final sellTx = isSourceBuy ? candidate : sourceTx;
@@ -224,9 +313,12 @@ class SelectMatchCandidateSheet extends StatelessWidget {
                         margin: const EdgeInsets.only(bottom: 8),
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: AppColors.card,
+                          color: isIdeal ? AppColors.primary.withValues(alpha: 0.08) : AppColors.card,
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppColors.border),
+                          border: Border.all(
+                            color: isIdeal ? AppColors.primary : AppColors.border,
+                            width: isIdeal ? 1.5 : 1.0,
+                          ),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -246,18 +338,46 @@ class SelectMatchCandidateSheet extends StatelessWidget {
                                         'Precio: \$${candidate.price.toStringAsFixed(candidate.price < 1 ? 4 : 2)}',
                                         style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13),
                                       ),
+                                      if (isIdeal) ...[
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.primary,
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: const Text(
+                                            '🎯 IDEAL',
+                                            style: TextStyle(color: Colors.black, fontSize: 9, fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                      ] else if (isNear400) ...[
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.primary.withValues(alpha: 0.2),
+                                            borderRadius: BorderRadius.circular(4),
+                                            border: Border.all(color: AppColors.primary, width: 0.6),
+                                          ),
+                                          child: Text(
+                                            '~\$${standardBuySize.toStringAsFixed(0)}',
+                                            style: const TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                      ],
                                     ],
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Disponible: ${_formatAmount(candidateRemaining)} $baseAsset (\$${(candidate.price * candidateRemaining).toStringAsFixed(2)})',
+                                    'Compra: ${_formatAmount(candRemaining)} $baseAsset · Total: \$${candCost.toStringAsFixed(2)} $quoteAsset',
                                     style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
                                   ),
                                   const SizedBox(height: 4),
                                   Row(
                                     children: [
                                       const Text(
-                                        'PnL proyectado: ',
+                                        'PnL neto: ',
                                         style: TextStyle(color: AppColors.textMuted, fontSize: 11),
                                       ),
                                       Text(
@@ -289,7 +409,7 @@ class SelectMatchCandidateSheet extends StatelessWidget {
                                     buy: buyTx,
                                     sell: sellTx,
                                     provider: provider,
-                                    onMatchedSuccessfully: onMatchedSuccessfully,
+                                    onMatchedSuccessfully: widget.onMatchedSuccessfully,
                                   ),
                                 );
                               },
