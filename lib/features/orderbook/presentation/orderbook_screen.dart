@@ -17,13 +17,36 @@ class OrderBookScreen extends StatefulWidget {
   State<OrderBookScreen> createState() => _OrderBookScreenState();
 }
 
-class _OrderBookScreenState extends State<OrderBookScreen> with SingleTickerProviderStateMixin {
+class _OrderBookScreenState extends State<OrderBookScreen> with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   late TabController _tabController;
+  String? _lastExchange;
+  String? _lastSymbol;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final watchlistProvider = Provider.of<WatchlistProvider>(context);
+    if (_lastExchange != watchlistProvider.currentExchange || _lastSymbol != watchlistProvider.selectedSymbol) {
+      _lastExchange = watchlistProvider.currentExchange;
+      _lastSymbol = watchlistProvider.selectedSymbol;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Provider.of<OrderBookProvider>(context, listen: false).init(
+            watchlistProvider.currentExchange,
+            watchlistProvider.selectedSymbol,
+          );
+        }
+      });
+    }
   }
 
   @override
@@ -34,15 +57,12 @@ class _OrderBookScreenState extends State<OrderBookScreen> with SingleTickerProv
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final orderBookProvider = Provider.of<OrderBookProvider>(context);
     final watchlistProvider = Provider.of<WatchlistProvider>(context);
 
-    final currentExchange = watchlistProvider.currentExchange;
     final currentSymbol = watchlistProvider.selectedSymbol;
     final currentPrice = watchlistProvider.prices[currentSymbol];
-
-    // Ensure orderbook is initialized
-    orderBookProvider.init(currentExchange, currentSymbol);
 
     return Container(
       color: const Color(0xFF0B0E11),

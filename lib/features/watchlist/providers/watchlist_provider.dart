@@ -105,28 +105,47 @@ class WatchlistProvider extends ChangeNotifier {
     }
   }
 
+  bool _isFetchingPrices = false;
+
   // Fetch prices once
   Future<void> fetchCurrentPrices() async {
-    if (_isLoading) return;
-    _isLoading = _prices.isEmpty; // Only show loader on initial fetch
-    if (_isLoading) notifyListeners();
+    if (_isFetchingPrices) return;
+    _isFetchingPrices = true;
+
+    final bool isInitial = _prices.isEmpty;
+    if (isInitial) {
+      _isLoading = true;
+      notifyListeners();
+    }
 
     try {
       final newPrices = await ExchangeService.instance.fetchPrices(_currentExchange, _symbols);
-      _prices.addAll(newPrices);
+      bool changed = false;
+      for (var entry in newPrices.entries) {
+        if (_prices[entry.key] != entry.value) {
+          _prices[entry.key] = entry.value;
+          changed = true;
+        }
+      }
+      if (changed || isInitial) {
+        notifyListeners();
+      }
     } catch (e) {
       print('Error loading prices: $e');
+    } finally {
+      _isFetchingPrices = false;
+      if (isInitial) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
-
-    _isLoading = false;
-    notifyListeners();
   }
 
-  // Start periodic polling (every 8 seconds)
+  // Start periodic polling (every 10 seconds)
   void startPricePolling() {
     _pollingTimer?.cancel();
     fetchCurrentPrices();
-    _pollingTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       fetchCurrentPrices();
     });
   }

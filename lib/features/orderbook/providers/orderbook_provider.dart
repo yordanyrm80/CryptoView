@@ -42,6 +42,7 @@ class OrderBookProvider with ChangeNotifier {
 
   double _maxCumulative = 0.0;
   bool _isLoading = false;
+  bool _isFetching = false;
   String? _errorMessage;
 
   Timer? _pollingTimer;
@@ -70,28 +71,36 @@ class OrderBookProvider with ChangeNotifier {
   }
 
   void init(String exchange, String symbol) {
-    if (_currentExchange != exchange || _currentSymbol != symbol || _pollingTimer == null) {
+    if (_currentExchange != exchange || _currentSymbol != symbol) {
       _currentExchange = exchange;
       _currentSymbol = symbol;
       fetchOrderBookAndTrades();
-      _startPolling();
     }
   }
 
-  void _startPolling() {
-    _pollingTimer?.cancel();
-    _pollingTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) {
+  void startPolling() {
+    if (_pollingTimer != null && _pollingTimer!.isActive) return;
+    fetchOrderBookAndTrades(silent: true);
+    _pollingTimer = Timer.periodic(const Duration(milliseconds: 2500), (_) {
       fetchOrderBookAndTrades(silent: true);
     });
   }
 
+  void stopPolling() {
+    _pollingTimer?.cancel();
+    _pollingTimer = null;
+  }
+
   @override
   void dispose() {
-    _pollingTimer?.cancel();
+    stopPolling();
     super.dispose();
   }
 
   Future<void> fetchOrderBookAndTrades({bool silent = false}) async {
+    if (_isFetching) return;
+    _isFetching = true;
+
     if (!silent) {
       _isLoading = true;
       _errorMessage = null;
@@ -158,6 +167,7 @@ class OrderBookProvider with ChangeNotifier {
       _errorMessage = e.toString();
     } finally {
       _isLoading = false;
+      _isFetching = false;
       notifyListeners();
     }
   }

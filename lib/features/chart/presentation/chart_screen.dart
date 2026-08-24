@@ -18,6 +18,7 @@ import 'widgets/chart_toolbar.dart';
 import 'widgets/chart_drawing_list_panel.dart';
 import 'widgets/chart_layer_filter_bar.dart';
 import '../../orderbook/presentation/orderbook_screen.dart';
+import '../../orderbook/providers/orderbook_provider.dart';
 import '../../trading/presentation/trading_panel_screen.dart';
 import '../../trading/providers/trading_provider.dart';
 
@@ -46,10 +47,22 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
   void initState() {
     super.initState();
     _mainTabController = TabController(length: 3, vsync: this);
+    _mainTabController.addListener(_handleTabChange);
+  }
+
+  void _handleTabChange() {
+    if (!mounted) return;
+    final orderBookProvider = Provider.of<OrderBookProvider>(context, listen: false);
+    if (_mainTabController.index == 1) {
+      orderBookProvider.startPolling();
+    } else {
+      orderBookProvider.stopPolling();
+    }
   }
 
   @override
   void dispose() {
+    _mainTabController.removeListener(_handleTabChange);
     _mainTabController.dispose();
     super.dispose();
   }
@@ -209,7 +222,8 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
     final watchlistProvider = Provider.of<WatchlistProvider>(context);
     final trackerProvider = Provider.of<TrackerProvider>(context);
     final settingsProvider = Provider.of<SettingsProvider>(context);
-    final tradingProvider = Provider.of<TradingProvider>(context);
+    // Isolate trading provider listener: only rebuild ChartScreen if openOrders changes
+    final openOrders = context.select<TradingProvider, List<OpenOrderItem>>((p) => p.openOrders);
 
     final String currentSymbol = watchlistProvider.selectedSymbol;
     final String currentExchange = watchlistProvider.currentExchange;
@@ -325,7 +339,7 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
     }
 
     // 4. Active Open Orders in Exchange (KuCoin / Binance)
-    final activeOpenOrders = tradingProvider.openOrders.where((o) =>
+    final activeOpenOrders = openOrders.where((o) =>
         o.symbol.replaceAll('-', '').replaceAll('/', '').toUpperCase() ==
         currentSymbol.replaceAll('-', '').replaceAll('/', '').toUpperCase());
 
@@ -480,7 +494,6 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
             watchlistProvider: watchlistProvider,
             trackerProvider: trackerProvider,
             settingsProvider: settingsProvider,
-            tradingProvider: tradingProvider,
             currentSymbol: currentSymbol,
             currentExchange: currentExchange,
             currentPrice: currentPrice,
@@ -489,7 +502,7 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
           ),
           OrderBookScreen(
             onPriceSelected: (price, side) {
-              tradingProvider.preloadFromPrice(price, side: side);
+              context.read<TradingProvider>().preloadFromPrice(price, side: side);
               _mainTabController.animateTo(2);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
@@ -515,7 +528,6 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
     required WatchlistProvider watchlistProvider,
     required TrackerProvider trackerProvider,
     required SettingsProvider settingsProvider,
-    required TradingProvider tradingProvider,
     required String currentSymbol,
     required String currentExchange,
     required double? currentPrice,
@@ -664,7 +676,7 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
                       } else if (chartProvider.activeTool == 'ruler') {
                         chartProvider.handleRulerTap(tappedPrice, tappedTime);
                       } else if (chartProvider.activeTool == 'place_order') {
-                        tradingProvider.preloadFromPrice(tappedPrice);
+                        context.read<TradingProvider>().preloadFromPrice(tappedPrice);
                         chartProvider.setActiveTool('none');
                         _mainTabController.animateTo(2);
                         ScaffoldMessenger.of(context).showSnackBar(

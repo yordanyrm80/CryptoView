@@ -33,12 +33,15 @@ class TradingProvider with ChangeNotifier {
   String _currentExchange = 'KuCoin';
   String _currentSymbol = 'ETH/USDT';
 
+  bool _isInitialized = false;
   bool _isBuy = true;
   bool _isLimit = true;
   bool _isSubmitting = false;
   bool _isLoadingOrders = false;
+  bool _isLoadingBalances = false;
   String? _statusMessage;
   bool _isSuccess = false;
+  double? _lastMarketPrice;
 
   final TextEditingController priceController = TextEditingController();
   final TextEditingController amountController = TextEditingController();
@@ -49,10 +52,12 @@ class TradingProvider with ChangeNotifier {
   List<OpenOrderItem> _openOrders = [];
   Timer? _openOrdersTimer;
 
+  bool get isInitialized => _isInitialized;
   bool get isBuy => _isBuy;
   bool get isLimit => _isLimit;
   bool get isSubmitting => _isSubmitting;
   bool get isLoadingOrders => _isLoadingOrders;
+  bool get isLoadingBalances => _isLoadingBalances;
   String? get statusMessage => _statusMessage;
   bool get isSuccess => _isSuccess;
   double get availableUSDT => _availableUSDT;
@@ -71,27 +76,35 @@ class TradingProvider with ChangeNotifier {
     return parts.length > 1 ? parts[1] : 'USDT';
   }
 
-  void init(String exchange, String symbol, double? marketPrice) {
-    bool symbolChanged = _currentExchange != exchange || _currentSymbol != symbol;
+  /// Initializes trading data only when symbol/exchange change or on first load.
+  void init(String exchange, String symbol, double? marketPrice, {bool force = false}) {
+    final bool exchangeChanged = _currentExchange != exchange;
+    final bool symbolChanged = _currentSymbol != symbol;
+    final bool needsRefresh = !_isInitialized || exchangeChanged || symbolChanged || force;
+
     _currentExchange = exchange;
     _currentSymbol = symbol;
+    _lastMarketPrice = marketPrice;
 
-    if (symbolChanged && marketPrice != null && marketPrice > 0) {
-      if (priceController.text.isEmpty || double.tryParse(priceController.text) == 0.0) {
-        priceController.text = marketPrice.toStringAsFixed(marketPrice < 1.0 ? 4 : 2);
+    if (needsRefresh) {
+      _isInitialized = true;
+      if (marketPrice != null && marketPrice > 0) {
+        if (priceController.text.isEmpty || symbolChanged || double.tryParse(priceController.text) == 0.0) {
+          priceController.text = marketPrice.toStringAsFixed(marketPrice < 1.0 ? 4 : 2);
+          onPriceChanged(priceController.text);
+        }
       }
+      loadBalances();
+      loadOpenOrders();
+      _startOrdersPolling();
     }
-
-    loadBalances();
-    loadOpenOrders();
-    _startOrdersPolling();
   }
 
   void _startOrdersPolling() {
     _openOrdersTimer?.cancel();
-    _openOrdersTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+    _openOrdersTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       loadOpenOrders(silent: true);
-      loadBalances();
+      loadBalances(silent: true);
     });
   }
 
@@ -105,12 +118,14 @@ class TradingProvider with ChangeNotifier {
   }
 
   void setSide(bool isBuy) {
+    if (_isBuy == isBuy) return;
     _isBuy = isBuy;
     _statusMessage = null;
     notifyListeners();
   }
 
   void setOrderType(bool isLimit) {
+    if (_isLimit == isLimit) return;
     _isLimit = isLimit;
     _statusMessage = null;
     notifyListeners();
@@ -128,24 +143,18 @@ class TradingProvider with ChangeNotifier {
 
   void onPriceChanged(String val) {
     final price = double.tryParse(val) ?? 0.0;
-    final total = double.tryParse(totalController.text) ?? 0.0;
-    final amount = double.tryParse(amountController.text) ?? 0.0;
-
-    if (price > 0) {
-      if (total > 0 && amount == 0) {
-        amountController.text = (total / price).toStringAsFixed(6);
-      } else if (amount > 0) {
-        totalController.text = (amount * price).toStringAsFixed(2);
-      }
+    final amt = double.tryParse(amountController.text) ?? 0.0;
+    if (price > 0 && amt > 0) {
+      totalController.text = (price * amt).toStringAsFixed(2);
     }
     notifyListeners();
   }
 
   void onAmountChanged(String val) {
-    final amount = double.tryParse(val) ?? 0.0;
+    final amt = double.tryParse(val) ?? 0.0;
     final price = double.tryParse(priceController.text) ?? 0.0;
-    if (price > 0 && amount >= 0) {
-      totalController.text = (amount * price).toStringAsFixed(2);
+    if (price > 0 && amt > 0) {
+      totalController.text = (price * amt).toStringAsFixed(2);
     }
     notifyListeners();
   }
@@ -182,11 +191,19 @@ class TradingProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> loadBalances() async {
+  Future<void> loadBalances({bool silent = false}) async {
+    if (_isLoadingBalances) return;
+    _isLoadingBalances = true;
+    if (!silent) notifyListeners();
+
     try {
       final db = DatabaseHelper.instance;
       final keys = await db.getApiKey(_currentExchange);
-      if (keys == null || keys['api_key'] == null || keys['api_key'].toString().isEmpty) return;
+      if (keys == null || keys['api_key'] == null || keys['api_key'].toString().isEmpty) {
+        _isLoadingBalances = false;
+        if (!silent) notifyListeners();
+        return;
+      }
 
       final balances = await _exchangeService.fetchBalances(
         exchange: _currentExchange,
@@ -195,15 +212,24 @@ class TradingProvider with ChangeNotifier {
         apiPassphrase: keys['api_passphrase'],
       );
 
-      _availableUSDT = balances['USDT'] ?? 0.0;
-      _availableCrypto = balances[baseAsset] ?? 0.0;
+      final newUSDT = balances['USDT'] ?? 0.0;
+      final newCrypto = balances[baseAsset] ?? 0.0;
+      if (newUSDT != _availableUSDT || newCrypto != _availableCrypto || !silent) {
+        _availableUSDT = newUSDT;
+        _availableCrypto = newCrypto;
+      }
+    } catch (_) {
+      // Ignored
+    } finally {
+      _isLoadingBalances = false;
       notifyListeners();
-    } catch (_) {}
+    }
   }
 
   Future<void> loadOpenOrders({bool silent = false}) async {
+    if (_isLoadingOrders) return;
+    _isLoadingOrders = true;
     if (!silent) {
-      _isLoadingOrders = true;
       notifyListeners();
     }
 
