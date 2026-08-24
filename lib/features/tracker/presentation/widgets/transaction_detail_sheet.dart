@@ -11,6 +11,16 @@ class TransactionDetailSheet extends StatelessWidget {
 
   const TransactionDetailSheet({Key? key, required this.tx, required this.provider}) : super(key: key);
 
+  String _formatAmount(double value) {
+    if (value == value.roundToDouble()) {
+      return value.toInt().toString();
+    }
+    String s = value.toStringAsFixed(6);
+    s = s.replaceAll(RegExp(r'0+$'), '');
+    s = s.replaceAll(RegExp(r'\.$'), '');
+    return s;
+  }
+
   Widget _detailField({required String title, required String value, Color? valueColor}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -30,6 +40,7 @@ class TransactionDetailSheet extends StatelessWidget {
     final isBuy = tx.type == 'buy';
     final totalValue = tx.price * tx.amount;
     final remaining = provider.getRemainingAmount(tx);
+    final isFullyMatched = remaining == 0;
     final dateStr = '${tx.date.day.toString().padLeft(2, '0')}/${tx.date.month.toString().padLeft(2, '0')}/${tx.date.year} ${tx.date.hour.toString().padLeft(2, '0')}:${tx.date.minute.toString().padLeft(2, '0')}';
 
     final parts = tx.symbol.split('/');
@@ -38,28 +49,41 @@ class TransactionDetailSheet extends StatelessWidget {
 
     final matches = provider.matches.where((m) => m.buyTransactionId == tx.id || m.sellTransactionId == tx.id).toList();
 
-    // Live Price & PnL
+    // Standard buy size for exchange
+    final standardBuySize = provider.getBuyAmountForExchange(tx.exchange);
+
+    // BUY: Live Price & PnL
     final watchlistProvider = Provider.of<WatchlistProvider>(context, listen: false);
     final double? currentMarketPrice = watchlistProvider.prices[tx.symbol];
 
-    double? diffPct;
-    double? diffUsdt;
-    bool isProfit = false;
+    double? buyDiffPct;
+    double? buyDiffUsdt;
+    bool isBuyProfit = false;
 
-    if (currentMarketPrice != null && currentMarketPrice > 0) {
-      if (isBuy) {
-        diffPct = ((currentMarketPrice - tx.price) / tx.price) * 100;
-        diffUsdt = (currentMarketPrice - tx.price) * remaining;
-        isProfit = diffPct >= 0;
-      } else {
-        diffPct = ((tx.price - currentMarketPrice) / currentMarketPrice) * 100;
-        diffUsdt = (tx.price - currentMarketPrice) * remaining;
-        isProfit = diffPct >= 0;
-      }
+    if (isBuy && currentMarketPrice != null && currentMarketPrice > 0) {
+      buyDiffPct = ((currentMarketPrice - tx.price) / tx.price) * 100;
+      buyDiffUsdt = (currentMarketPrice - tx.price) * remaining;
+      isBuyProfit = buyDiffPct >= 0;
     }
 
-    final pnlColor = isProfit ? AppColors.bull : AppColors.bear;
-    final sign = isProfit ? '+' : '';
+    // SELL: Exact vs Approximate
+    double? sellExactProfitUsdt;
+    double? sellExactProfitPct;
+    double? sellApproxProfitUsdt;
+    double? sellApproxProfitPct;
+
+    if (!isBuy) {
+      if (isFullyMatched && matches.isNotEmpty) {
+        final profitSum = matches.fold<double>(0.0, (double sum, m) => sum + m.profit);
+        final totalBuyCost = matches.fold<double>(0.0, (double sum, m) => sum + ((m.buyPrice ?? 0.0) * m.matchedAmount));
+        sellExactProfitUsdt = profitSum;
+        sellExactProfitPct = totalBuyCost > 0 ? (profitSum / totalBuyCost) * 100 : 0.0;
+      } else {
+        final approxBaseCost = standardBuySize * (remaining / tx.amount);
+        sellApproxProfitUsdt = (tx.price * remaining) - approxBaseCost;
+        sellApproxProfitPct = approxBaseCost > 0 ? (sellApproxProfitUsdt / approxBaseCost) * 100 : 0.0;
+      }
+    }
 
     return Container(
       decoration: const BoxDecoration(
@@ -118,15 +142,15 @@ class TransactionDetailSheet extends StatelessWidget {
             ],
           ),
 
-          // Live Market PnL Card
-          if (diffPct != null) ...[
+          // 1. BUY: Live Market PnL Card
+          if (isBuy && buyDiffPct != null) ...[
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: pnlColor.withValues(alpha: 0.12),
+                color: (isBuyProfit ? AppColors.bull : AppColors.bear).withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: pnlColor.withValues(alpha: 0.5)),
+                border: Border.all(color: (isBuyProfit ? AppColors.bull : AppColors.bear).withValues(alpha: 0.5)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -135,8 +159,8 @@ class TransactionDetailSheet extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        isBuy ? 'Rendimiento con Precio Actual' : 'Diferencia vs Mercado',
-                        style: TextStyle(color: pnlColor, fontSize: 11, fontWeight: FontWeight.bold),
+                        'Rendimiento con Precio Actual (En Cartera)',
+                        style: TextStyle(color: isBuyProfit ? AppColors.bull : AppColors.bear, fontSize: 11, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -149,15 +173,84 @@ class TransactionDetailSheet extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        '$sign${diffPct.toStringAsFixed(2)}%',
-                        style: TextStyle(color: pnlColor, fontSize: 16, fontWeight: FontWeight.bold),
+                        '${isBuyProfit ? '+' : ''}${buyDiffPct.toStringAsFixed(2)}%',
+                        style: TextStyle(color: isBuyProfit ? AppColors.bull : AppColors.bear, fontSize: 16, fontWeight: FontWeight.bold),
                       ),
-                      if (diffUsdt != null && remaining > 0)
+                      if (buyDiffUsdt != null && remaining > 0)
                         Text(
-                          '$sign\$${diffUsdt.abs().toStringAsFixed(2)} $quoteAsset',
-                          style: TextStyle(color: pnlColor, fontSize: 12, fontWeight: FontWeight.w600),
+                          '${isBuyProfit ? '+' : ''}\$${buyDiffUsdt.abs().toStringAsFixed(2)} $quoteAsset',
+                          style: TextStyle(color: isBuyProfit ? AppColors.bull : AppColors.bear, fontSize: 12, fontWeight: FontWeight.w600),
                         ),
                     ],
+                  ),
+                ],
+              ),
+            ),
+          ]
+
+          // 2. SELL (Unmatched): Estimated Profit Card vs standard $400 purchase
+          else if (!isBuy && !isFullyMatched && sellApproxProfitPct != null) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: (sellApproxProfitPct >= 0 ? AppColors.bull : AppColors.bear).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: (sellApproxProfitPct >= 0 ? AppColors.bull : AppColors.bear).withValues(alpha: 0.5)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.secondary.withValues(alpha: 0.25),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              'APROXIMADO',
+                              style: TextStyle(color: AppColors.secondary, fontSize: 10, fontWeight: FontWeight.w900),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Ganancia Estimada',
+                            style: TextStyle(color: AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            '~${sellApproxProfitPct >= 0 ? '+' : ''}${sellApproxProfitPct.toStringAsFixed(2)}%',
+                            style: TextStyle(
+                              color: sellApproxProfitPct >= 0 ? AppColors.bull : AppColors.bear,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            '~${sellApproxProfitPct >= 0 ? '+' : ''}\$${sellApproxProfitUsdt!.abs().toStringAsFixed(2)} USDT',
+                            style: TextStyle(
+                              color: sellApproxProfitPct >= 0 ? AppColors.bull : AppColors.bear,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Estimado basado en compras habituales de \$${standardBuySize.toStringAsFixed(0)} USDT. Casa esta venta para fijar la ganancia exacta.',
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
                   ),
                 ],
               ),
@@ -167,8 +260,8 @@ class TransactionDetailSheet extends StatelessWidget {
           const Divider(color: AppColors.border, height: 32),
           Row(
             children: [
-              Expanded(child: _detailField(title: 'Precio de Orden', value: '\$${tx.price.toStringAsFixed(tx.price > 1 ? 2 : 6)} $quoteAsset')),
-              Expanded(child: _detailField(title: 'Cantidad', value: '${tx.amount} $baseAsset')),
+              Expanded(child: _detailField(title: isBuy ? 'Precio de Compra' : 'Precio de Venta', value: '\$${tx.price.toStringAsFixed(tx.price > 1 ? 2 : 6)} $quoteAsset')),
+              Expanded(child: _detailField(title: 'Cantidad', value: '${_formatAmount(tx.amount)} $baseAsset')),
             ],
           ),
           const SizedBox(height: 16),
@@ -176,7 +269,7 @@ class TransactionDetailSheet extends StatelessWidget {
             children: [
               Expanded(
                 child: _detailField(
-                  title: 'Total Operado',
+                  title: isBuy ? 'Total Invertido' : 'Total Obtenido',
                   value: '\$${totalValue.toStringAsFixed(quoteAsset == 'USDT' || quoteAsset == 'USDC' ? 2 : 6)} $quoteAsset',
                   valueColor: isBuy ? AppColors.primary : AppColors.secondary,
                 ),
@@ -190,7 +283,7 @@ class TransactionDetailSheet extends StatelessWidget {
               Expanded(
                 child: _detailField(
                   title: 'Cantidad Disponible',
-                  value: '$remaining / ${tx.amount} $baseAsset',
+                  value: '${_formatAmount(remaining)} / ${_formatAmount(tx.amount)} $baseAsset',
                   valueColor: remaining > 0 ? AppColors.primary : AppColors.textMuted,
                 ),
               ),
@@ -238,7 +331,7 @@ class TransactionDetailSheet extends StatelessWidget {
                           children: [
                             Text(matchedText, style: const TextStyle(color: AppColors.textPrimary, fontSize: 12)),
                             const SizedBox(height: 2),
-                            Text('Volumen casado: ${m.matchedAmount} $baseAsset', style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                            Text('Volumen casado: ${_formatAmount(m.matchedAmount)} $baseAsset', style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
                           ],
                         ),
                         Text(

@@ -8,8 +8,18 @@ class TrackerProvider extends ChangeNotifier {
   List<TransactionModel> _transactions = [];
   List<MatchModel> _matches = [];
   Map<String, double> _exchangeBalances = {};
+  Map<String, double> _defaultBuyAmounts = {'KuCoin': 400.0, 'Binance': 400.0, 'Bybit': 400.0};
   bool _isLoading = false;
   bool _isFetchingBalance = false;
+
+  double getBuyAmountForExchange(String exchange) {
+    for (var k in _defaultBuyAmounts.keys) {
+      if (k.toLowerCase() == exchange.toLowerCase()) {
+        return _defaultBuyAmounts[k]!;
+      }
+    }
+    return 400.0;
+  }
 
   // Import progress state
   bool _isImporting = false;
@@ -161,6 +171,11 @@ class TrackerProvider extends ChangeNotifier {
 
       final matchData = await DatabaseHelper.instance.queryAllMatches();
       _matches = matchData.map((map) => MatchModel.fromMap(map)).toList();
+
+      final exchanges = ['KuCoin', 'Binance', 'Bybit', 'OKX', 'Gate.io', 'MEXC', 'Coinbase'];
+      for (var ex in exchanges) {
+        _defaultBuyAmounts[ex] = await DatabaseHelper.instance.getDefaultBuyAmount(ex);
+      }
 
       // Attempt to load balance
       await fetchLiveBalance(_activeExchange);
@@ -326,6 +341,7 @@ class TrackerProvider extends ChangeNotifier {
   }
 
   Future<void> setDefaultBuyAmount(String exchange, double amount) async {
+    _defaultBuyAmounts[exchange] = amount;
     await DatabaseHelper.instance.setDefaultBuyAmount(exchange, amount);
     notifyListeners();
   }
