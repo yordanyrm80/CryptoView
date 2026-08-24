@@ -433,16 +433,14 @@ class TrackerProvider extends ChangeNotifier {
         whereArgs: [exchange, symbol],
       );
 
-      final existingKeys = existingTxData.map((row) {
-        final type = row['type'] as String;
-        final price = (row['price'] as num).toDouble();
-        final amount = (row['amount'] as num).toDouble();
-        final fee = (row['fee'] as num).toDouble();
-        final dateStr = row['date'] as String;
-        
-        final parsedDate = DateTime.parse(dateStr).toIso8601String();
-        return '${symbol}_${type}_${price}_${amount}_${fee}_$parsedDate';
-      }).toSet();
+      final existingTxList = existingTxData.map((row) {
+        return {
+          'type': row['type'] as String,
+          'price': (row['price'] as num).toDouble(),
+          'amount': (row['amount'] as num).toDouble(),
+          'date': DateTime.parse(row['date'] as String),
+        };
+      }).toList();
 
       int importedCount = 0;
 
@@ -453,10 +451,19 @@ class TrackerProvider extends ChangeNotifier {
         final fee = fill['fee'] as double;
         final createdAtMs = fill['createdAt'] as int;
         final date = DateTime.fromMillisecondsSinceEpoch(createdAtMs);
-        
-        final key = '${symbol}_${type}_${price}_${amount}_${fee}_${date.toIso8601String()}';
 
-        if (!existingKeys.contains(key)) {
+        final alreadyExists = existingTxList.any((tx) {
+          if (tx['type'] != type) return false;
+          final priceDiff = ((tx['price'] as double) - price).abs();
+          if (priceDiff > 0.05) return false;
+          final amountDiff = ((tx['amount'] as double) - amount).abs();
+          if (amountDiff > 0.0005) return false;
+          final timeDiff = (tx['date'] as DateTime).difference(date).inHours.abs();
+          if (timeDiff > 24) return false;
+          return true;
+        });
+
+        if (!alreadyExists) {
           final tx = TransactionModel(
             exchange: exchange,
             symbol: symbol,
@@ -468,6 +475,12 @@ class TrackerProvider extends ChangeNotifier {
           );
 
           await DatabaseHelper.instance.insertTransaction(tx.toMap());
+          existingTxList.add({
+            'type': type,
+            'price': price,
+            'amount': amount,
+            'date': date,
+          });
           importedCount++;
         }
       }
