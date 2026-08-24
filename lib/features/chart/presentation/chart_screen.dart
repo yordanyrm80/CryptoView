@@ -17,6 +17,9 @@ import 'widgets/chart_active_tool_chip.dart';
 import 'widgets/chart_toolbar.dart';
 import 'widgets/chart_drawing_list_panel.dart';
 import 'widgets/chart_layer_filter_bar.dart';
+import '../../orderbook/presentation/orderbook_screen.dart';
+import '../../trading/presentation/trading_panel_screen.dart';
+import '../../trading/providers/trading_provider.dart';
 
 class ChartScreen extends StatefulWidget {
   const ChartScreen({Key? key}) : super(key: key);
@@ -25,7 +28,8 @@ class ChartScreen extends StatefulWidget {
   _ChartScreenState createState() => _ChartScreenState();
 }
 
-class _ChartScreenState extends State<ChartScreen> {
+class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStateMixin {
+  late TabController _mainTabController;
   ChartSeriesController? _chartSeriesController;
   String? _lastLoadedSymbol;
   String? _lastLoadedExchange;
@@ -37,6 +41,18 @@ class _ChartScreenState extends State<ChartScreen> {
   double? _visibleMaxY;
   DateTime? _visibleMinX;
   DateTime? _visibleMaxX;
+
+  @override
+  void initState() {
+    super.initState();
+    _mainTabController = TabController(length: 3, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _mainTabController.dispose();
+    super.dispose();
+  }
 
   @override
   void didChangeDependencies() {
@@ -193,6 +209,7 @@ class _ChartScreenState extends State<ChartScreen> {
     final watchlistProvider = Provider.of<WatchlistProvider>(context);
     final trackerProvider = Provider.of<TrackerProvider>(context);
     final settingsProvider = Provider.of<SettingsProvider>(context);
+    final tradingProvider = Provider.of<TradingProvider>(context);
 
     final String currentSymbol = watchlistProvider.selectedSymbol;
     final String currentExchange = watchlistProvider.currentExchange;
@@ -307,6 +324,35 @@ class _ChartScreenState extends State<ChartScreen> {
       }
     }
 
+    // 4. Active Open Orders in Exchange (KuCoin / Binance)
+    final activeOpenOrders = tradingProvider.openOrders.where((o) =>
+        o.symbol.replaceAll('-', '').replaceAll('/', '').toUpperCase() ==
+        currentSymbol.replaceAll('-', '').replaceAll('/', '').toUpperCase());
+
+    for (var order in activeOpenOrders) {
+      final isBuyOrder = order.side == 'buy';
+      final orderColor = isBuyOrder ? const Color(0xFF00E676) : const Color(0xFFFF5252);
+
+      plotBands.add(
+        PlotBand(
+          isVisible: true,
+          start: order.price,
+          end: order.price,
+          borderColor: orderColor,
+          borderWidth: 2.0,
+          dashArray: const <double>[8, 4],
+          text: '  ⏳ LÍMITE ${isBuyOrder ? "COMPRA" : "VENTA"}: \$${order.price.toStringAsFixed(order.price < 1.0 ? 4 : 2)} (${order.size.toStringAsFixed(4)})',
+          textStyle: TextStyle(
+            color: orderColor,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+          ),
+          horizontalTextAlignment: TextAnchor.start,
+          verticalTextAlignment: TextAnchor.middle,
+        ),
+      );
+    }
+
     if (chartProvider.rulerStartPrice != null && chartProvider.rulerEndPrice == null) {
       plotBands.add(
         PlotBand(
@@ -378,299 +424,395 @@ class _ChartScreenState extends State<ChartScreen> {
             },
           ),
         ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(38),
+          child: Container(
+            color: AppColors.card,
+            child: TabBar(
+              controller: _mainTabController,
+              indicatorColor: AppColors.primary,
+              indicatorWeight: 2.5,
+              labelColor: AppColors.primary,
+              unselectedLabelColor: AppColors.textMuted,
+              labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              tabs: const [
+                Tab(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.show_chart, size: 14),
+                      SizedBox(width: 6),
+                      Text('Gráfico'),
+                    ],
+                  ),
+                ),
+                Tab(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.menu_book_outlined, size: 14),
+                      SizedBox(width: 6),
+                      Text('Libro de Órdenes'),
+                    ],
+                  ),
+                ),
+                Tab(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.bolt, size: 14),
+                      SizedBox(width: 6),
+                      Text('Operar'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
-      body: Column(
+      body: TabBarView(
+        controller: _mainTabController,
         children: [
-          TimeframeSelectorBar(
+          _buildChartTabContent(
+            context: context,
             chartProvider: chartProvider,
-            currentExchange: currentExchange,
-            currentSymbol: currentSymbol,
-          ),
-          ChartLayerFilterBar(
+            watchlistProvider: watchlistProvider,
+            trackerProvider: trackerProvider,
             settingsProvider: settingsProvider,
+            tradingProvider: tradingProvider,
+            currentSymbol: currentSymbol,
+            currentExchange: currentExchange,
+            currentPrice: currentPrice,
+            chartData: chartData,
+            plotBands: plotBands,
           ),
-          Expanded(
-            flex: 3,
-            child: Container(
-              color: const Color(0xFF0B0E11),
-              padding: const EdgeInsets.only(top: 8, right: 8),
-              child: Stack(
-                children: [
-                  if (chartData.isEmpty && !chartProvider.isLoading)
-                    const Center(
-                      child: Text('No hay datos de velas para este par.', style: TextStyle(color: AppColors.textMuted)),
-                    )
-                  else
-                    SfCartesianChart(
-                      backgroundColor: const Color(0xFF0B0E11),
-                      plotAreaBorderWidth: 0,
-                      onChartTouchInteractionDown: (ChartTouchInteractionArgs args) {
-                        if (_chartSeriesController == null) return;
-                        final CartesianChartPoint<dynamic>? tappedPoint = _chartSeriesController!.pixelToPoint(args.position);
-                        if (tappedPoint == null || tappedPoint.y == null || tappedPoint.x == null) return;
+          OrderBookScreen(
+            onPriceSelected: (price, side) {
+              tradingProvider.preloadFromPrice(price, side: side);
+              _mainTabController.animateTo(2);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  duration: const Duration(seconds: 2),
+                  backgroundColor: AppColors.primary,
+                  content: Text(
+                    'Precio \$${price.toStringAsFixed(price < 1.0 ? 4 : 2)} precargado en Panel de Trading.',
+                    style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              );
+            },
+          ),
+          const TradingPanelScreen(),
+        ],
+      ),
+    );
+  }
 
-                        DateTime tappedTime = tappedPoint.x is DateTime
-                            ? tappedPoint.x as DateTime
-                            : DateTime.fromMillisecondsSinceEpoch((tappedPoint.x as num).toInt());
+  Widget _buildChartTabContent({
+    required BuildContext context,
+    required ChartProvider chartProvider,
+    required WatchlistProvider watchlistProvider,
+    required TrackerProvider trackerProvider,
+    required SettingsProvider settingsProvider,
+    required TradingProvider tradingProvider,
+    required String currentSymbol,
+    required String currentExchange,
+    required double? currentPrice,
+    required List<ChartData> chartData,
+    required List<PlotBand> plotBands,
+  }) {
+    return Column(
+      children: [
+        TimeframeSelectorBar(
+          chartProvider: chartProvider,
+          currentExchange: currentExchange,
+          currentSymbol: currentSymbol,
+        ),
+        ChartLayerFilterBar(
+          settingsProvider: settingsProvider,
+        ),
+        Expanded(
+          flex: 3,
+          child: Container(
+            color: const Color(0xFF0B0E11),
+            padding: const EdgeInsets.only(top: 8, right: 8),
+            child: Stack(
+              children: [
+                if (chartData.isEmpty && !chartProvider.isLoading)
+                  const Center(
+                    child: Text('No hay datos de velas para este par.', style: TextStyle(color: AppColors.textMuted)),
+                  )
+                else
+                  SfCartesianChart(
+                    backgroundColor: const Color(0xFF0B0E11),
+                    plotAreaBorderWidth: 0,
+                    onChartTouchInteractionDown: (ChartTouchInteractionArgs args) {
+                      if (_chartSeriesController == null) return;
+                      final CartesianChartPoint<dynamic>? tappedPoint = _chartSeriesController!.pixelToPoint(args.position);
+                      if (tappedPoint == null || tappedPoint.y == null || tappedPoint.x == null) return;
 
-                        final double touchY = args.position.dy;
-                        final double touchX = args.position.dx;
-                        final double tappedPrice = (tappedPoint.y as num).toDouble();
+                      DateTime tappedTime = tappedPoint.x is DateTime
+                          ? tappedPoint.x as DateTime
+                          : DateTime.fromMillisecondsSinceEpoch((tappedPoint.x as num).toInt());
 
-                        if (chartProvider.rulerStartPrice != null) {
-                          final Offset startPixel = _chartSeriesController!.pointToPixel(
-                            CartesianChartPoint<DateTime>(x: tappedTime, y: chartProvider.rulerStartPrice!),
-                          );
-                          double? endPixelY;
-                          if (chartProvider.rulerEndPrice != null) {
-                            endPixelY = _chartSeriesController!.pointToPixel(
-                              CartesianChartPoint<DateTime>(x: tappedTime, y: chartProvider.rulerEndPrice!),
-                            ).dy;
-                          }
-                          double? startTimePixelX;
-                          double? endTimePixelX;
-                          if (chartProvider.rulerStartTime != null) {
-                            startTimePixelX = _chartSeriesController!.pointToPixel(
-                              CartesianChartPoint<DateTime>(x: chartProvider.rulerStartTime!, y: tappedPrice),
-                            ).dx;
-                          }
-                          if (chartProvider.rulerEndTime != null) {
-                            endTimePixelX = _chartSeriesController!.pointToPixel(
-                              CartesianChartPoint<DateTime>(x: chartProvider.rulerEndTime!, y: tappedPrice),
-                            ).dx;
-                          }
+                      final double touchY = args.position.dy;
+                      final double touchX = args.position.dx;
+                      final double tappedPrice = (tappedPoint.y as num).toDouble();
 
-                          final double distStart = (touchY - startPixel.dy).abs();
-                          final double distEnd = endPixelY != null ? (touchY - endPixelY).abs() : double.infinity;
-                          final double distStartTime = startTimePixelX != null ? (touchX - startTimePixelX).abs() : double.infinity;
-                          final double distEndTime = endTimePixelX != null ? (touchX - endTimePixelX).abs() : double.infinity;
-
-                          final double minDist = [distStart, distEnd, distStartTime, distEndTime].reduce((a, b) => a < b ? a : b);
-
-                          if (minDist < 28.0) {
-                            setState(() {
-                              if (minDist == distEnd) _draggingLine = 'end';
-                              else if (minDist == distStart) _draggingLine = 'start';
-                              else if (minDist == distEndTime) _draggingLine = 'endTime';
-                              else if (minDist == distStartTime) _draggingLine = 'startTime';
-                            });
-                            return;
-                          }
+                      if (chartProvider.rulerStartPrice != null) {
+                        final Offset startPixel = _chartSeriesController!.pointToPixel(
+                          CartesianChartPoint<DateTime>(x: tappedTime, y: chartProvider.rulerStartPrice!),
+                        );
+                        double? endPixelY;
+                        if (chartProvider.rulerEndPrice != null) {
+                          endPixelY = _chartSeriesController!.pointToPixel(
+                            CartesianChartPoint<DateTime>(x: tappedTime, y: chartProvider.rulerEndPrice!),
+                          ).dy;
+                        }
+                        double? startTimePixelX;
+                        double? endTimePixelX;
+                        if (chartProvider.rulerStartTime != null) {
+                          startTimePixelX = _chartSeriesController!.pointToPixel(
+                            CartesianChartPoint<DateTime>(x: chartProvider.rulerStartTime!, y: tappedPrice),
+                          ).dx;
+                        }
+                        if (chartProvider.rulerEndTime != null) {
+                          endTimePixelX = _chartSeriesController!.pointToPixel(
+                            CartesianChartPoint<DateTime>(x: chartProvider.rulerEndTime!, y: tappedPrice),
+                          ).dx;
                         }
 
-                        for (int i = 0; i < chartProvider.drawings.length; i++) {
-                          final double price = chartProvider.drawings[i]['price'];
-                          final int id = chartProvider.drawings[i]['id'];
-                          final double linePixelY = _chartSeriesController!.pointToPixel(CartesianChartPoint<DateTime>(x: tappedTime, y: price)).dy;
-                          if ((touchY - linePixelY).abs() < 28.0) {
-                            setState(() {
-                              _draggingLine = 'drawing';
-                              _draggingDrawingIndex = i;
-                              _draggingDrawingId = id;
-                            });
-                            return;
-                          }
-                        }
+                        final double distStart = (touchY - startPixel.dy).abs();
+                        final double distEnd = endPixelY != null ? (touchY - endPixelY).abs() : double.infinity;
+                        final double distStartTime = startTimePixelX != null ? (touchX - startTimePixelX).abs() : double.infinity;
+                        final double distEndTime = endTimePixelX != null ? (touchX - endTimePixelX).abs() : double.infinity;
 
+                        final double minDist = [distStart, distEnd, distStartTime, distEndTime].reduce((a, b) => a < b ? a : b);
+
+                        if (minDist < 28.0) {
+                          setState(() {
+                            if (minDist == distEnd) _draggingLine = 'end';
+                            else if (minDist == distStart) _draggingLine = 'start';
+                            else if (minDist == distEndTime) _draggingLine = 'endTime';
+                            else if (minDist == distStartTime) _draggingLine = 'startTime';
+                          });
+                          return;
+                        }
+                      }
+
+                      for (int i = 0; i < chartProvider.drawings.length; i++) {
+                        final d = chartProvider.drawings[i];
+                        final double linePrice = d['price'];
+                        final Offset linePixel = _chartSeriesController!.pointToPixel(
+                          CartesianChartPoint<DateTime>(x: tappedTime, y: linePrice),
+                        );
+                        final double dist = (touchY - linePixel.dy).abs();
+                        if (dist < 20.0) {
+                          setState(() {
+                            _draggingLine = 'drawing';
+                            _draggingDrawingIndex = i;
+                            _draggingDrawingId = d['id'];
+                          });
+                          return;
+                        }
+                      }
+                    },
+                    onChartTouchInteractionMove: (ChartTouchInteractionArgs args) {
+                      if (_draggingLine == null || _chartSeriesController == null) return;
+                      final CartesianChartPoint<dynamic>? tappedPoint = _chartSeriesController!.pixelToPoint(args.position);
+                      if (tappedPoint == null || tappedPoint.y == null || tappedPoint.x == null) return;
+
+                      final double newPrice = (tappedPoint.y as num).toDouble();
+                      DateTime newTime = tappedPoint.x is DateTime
+                          ? tappedPoint.x as DateTime
+                          : DateTime.fromMillisecondsSinceEpoch((tappedPoint.x as num).toInt());
+
+                      if (_draggingLine == 'start') chartProvider.updateRulerStartPrice(newPrice);
+                      else if (_draggingLine == 'end') chartProvider.updateRulerEndPrice(newPrice);
+                      else if (_draggingLine == 'startTime') chartProvider.updateRulerStartTime(newTime);
+                      else if (_draggingLine == 'endTime') chartProvider.updateRulerEndTime(newTime);
+                      else if (_draggingLine == 'drawing' && _draggingDrawingIndex != null) {
+                        chartProvider.updateDrawingPriceInMemory(_draggingDrawingIndex!, newPrice);
+                      }
+                    },
+                    onChartTouchInteractionUp: (ChartTouchInteractionArgs args) {
+                      if (_draggingLine != null) {
+                        if (_draggingLine == 'drawing' && _draggingDrawingId != null && _draggingDrawingIndex != null) {
+                          final double finalPrice = chartProvider.drawings[_draggingDrawingIndex!]['price'];
+                          chartProvider.saveDrawingPrice(_draggingDrawingId!, finalPrice, currentExchange, currentSymbol);
+                        }
                         setState(() {
                           _draggingLine = null;
                           _draggingDrawingIndex = null;
                           _draggingDrawingId = null;
                         });
-                      },
-                      onChartTouchInteractionMove: (ChartTouchInteractionArgs args) {
-                        if (_draggingLine == null || _chartSeriesController == null) return;
-                        final CartesianChartPoint<dynamic>? tappedPoint = _chartSeriesController!.pixelToPoint(args.position);
-                        if (tappedPoint == null || tappedPoint.y == null || tappedPoint.x == null) return;
+                        return;
+                      }
 
-                        final double newPrice = (tappedPoint.y as num).toDouble();
-                        DateTime newTime = tappedPoint.x is DateTime
-                            ? tappedPoint.x as DateTime
-                            : DateTime.fromMillisecondsSinceEpoch((tappedPoint.x as num).toInt());
+                      if (_chartSeriesController == null) return;
+                      final CartesianChartPoint<dynamic>? tappedPoint = _chartSeriesController!.pixelToPoint(args.position);
+                      if (tappedPoint == null || tappedPoint.y == null || tappedPoint.x == null) return;
 
-                        if (_draggingLine == 'start') chartProvider.updateRulerStartPrice(newPrice);
-                        else if (_draggingLine == 'end') chartProvider.updateRulerEndPrice(newPrice);
-                        else if (_draggingLine == 'startTime') chartProvider.updateRulerStartTime(newTime);
-                        else if (_draggingLine == 'endTime') chartProvider.updateRulerEndTime(newTime);
-                        else if (_draggingLine == 'drawing' && _draggingDrawingIndex != null) {
-                          chartProvider.updateDrawingPriceInMemory(_draggingDrawingIndex!, newPrice);
-                        }
-                      },
-                      onChartTouchInteractionUp: (ChartTouchInteractionArgs args) {
-                        if (_draggingLine != null) {
-                          if (_draggingLine == 'drawing' && _draggingDrawingId != null && _draggingDrawingIndex != null) {
-                            final double finalPrice = chartProvider.drawings[_draggingDrawingIndex!]['price'];
-                            chartProvider.saveDrawingPrice(_draggingDrawingId!, finalPrice, currentExchange, currentSymbol);
-                          }
-                          setState(() {
-                            _draggingLine = null;
-                            _draggingDrawingIndex = null;
-                            _draggingDrawingId = null;
-                          });
-                          return;
-                        }
+                      final double tappedPrice = (tappedPoint.y as num).toDouble();
+                      DateTime tappedTime = tappedPoint.x is DateTime
+                          ? tappedPoint.x as DateTime
+                          : DateTime.fromMillisecondsSinceEpoch((tappedPoint.x as num).toInt());
 
-                        if (_chartSeriesController == null) return;
-                        final CartesianChartPoint<dynamic>? tappedPoint = _chartSeriesController!.pixelToPoint(args.position);
-                        if (tappedPoint == null || tappedPoint.y == null || tappedPoint.x == null) return;
-
-                        final double tappedPrice = (tappedPoint.y as num).toDouble();
-                        DateTime tappedTime = tappedPoint.x is DateTime
-                            ? tappedPoint.x as DateTime
-                            : DateTime.fromMillisecondsSinceEpoch((tappedPoint.x as num).toInt());
-
-                        if (chartProvider.activeTool == 'horizontal_line') {
-                          _showAddLineDialog(tappedPrice, watchlistProvider, chartProvider);
-                        } else if (chartProvider.activeTool == 'ruler') {
-                          chartProvider.handleRulerTap(tappedPrice, tappedTime);
-                        }
-                      },
-                      zoomPanBehavior: ZoomPanBehavior(
-                        enablePinching: true,
-                        enablePanning: chartProvider.activeTool == 'none' && _draggingLine == null,
-                        enableMouseWheelZooming: true,
-                        zoomMode: ZoomMode.x,
-                      ),
-                      crosshairBehavior: CrosshairBehavior(
-                        enable: true,
-                        lineType: CrosshairLineType.horizontal,
-                        activationMode: ActivationMode.singleTap,
-                        lineColor: AppColors.primary,
-                        lineWidth: 1,
-                        lineDashArray: const <double>[4, 3],
-                      ),
-                      onActualRangeChanged: (ActualRangeChangedArgs args) {
-                        if (args.axisName == 'primaryYAxis') {
-                          _visibleMinY = args.visibleMin.toDouble();
-                          _visibleMaxY = args.visibleMax.toDouble();
-                        } else if (args.axisName == 'primaryXAxis') {
-                          _visibleMinX = DateTime.fromMillisecondsSinceEpoch(args.visibleMin.toInt());
-                          _visibleMaxX = DateTime.fromMillisecondsSinceEpoch(args.visibleMax.toInt());
-                        }
-                      },
-                      primaryXAxis: DateTimeAxis(
-                        dateFormat: DateFormat.MMMd(),
-                        majorGridLines: const MajorGridLines(color: AppColors.gridLine, width: 0.5),
-                        borderColor: Colors.transparent,
-                        axisLine: const AxisLine(color: AppColors.gridLine),
-                        minimum: _draggingLine != null ? _visibleMinX : null,
-                        maximum: _draggingLine != null ? _visibleMaxX : null,
-                      ),
-                      primaryYAxis: NumericAxis(
-                        opposedPosition: true,
-                        numberFormat: NumberFormat.simpleCurrency(decimalDigits: 2),
-                        majorGridLines: const MajorGridLines(color: AppColors.gridLine, width: 0.5),
-                        borderColor: Colors.transparent,
-                        axisLine: const AxisLine(color: AppColors.gridLine),
-                        plotBands: plotBands,
-                        minimum: _draggingLine != null ? _visibleMinY : null,
-                        maximum: _draggingLine != null ? _visibleMaxY : null,
-                      ),
-                      annotations: <CartesianChartAnnotation>[
-                        if (chartProvider.rulerStartPrice != null &&
-                            chartProvider.rulerEndPrice != null &&
-                            chartProvider.rulerStartTime != null &&
-                            chartProvider.rulerEndTime != null)
-                          CartesianChartAnnotation(
-                            widget: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: chartProvider.rulerEndPrice! >= chartProvider.rulerStartPrice! ? AppColors.bull : AppColors.bear,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.white, width: 0.5),
-                                boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2))],
-                              ),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    '${chartProvider.rulerPercent! >= 0 ? '+' : ''}${chartProvider.rulerPercent!.toStringAsFixed(2)}%',
-                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
-                                  ),
-                                  Text(
-                                    '\$${(chartProvider.rulerEndPrice! - chartProvider.rulerStartPrice!).toStringAsFixed(2)}',
-                                    style: const TextStyle(color: Colors.white70, fontSize: 9),
-                                  ),
-                                ],
-                              ),
+                      if (chartProvider.activeTool == 'horizontal_line') {
+                        _showAddLineDialog(tappedPrice, watchlistProvider, chartProvider);
+                      } else if (chartProvider.activeTool == 'ruler') {
+                        chartProvider.handleRulerTap(tappedPrice, tappedTime);
+                      } else if (chartProvider.activeTool == 'place_order') {
+                        tradingProvider.preloadFromPrice(tappedPrice);
+                        chartProvider.setActiveTool('none');
+                        _mainTabController.animateTo(2);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            duration: const Duration(seconds: 2),
+                            backgroundColor: AppColors.primary,
+                            content: Text(
+                              'Precio \$${tappedPrice.toStringAsFixed(tappedPrice < 1.0 ? 4 : 2)} precargado en Panel de Trading.',
+                              style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
                             ),
-                            coordinateUnit: CoordinateUnit.point,
-                            x: DateTime.fromMillisecondsSinceEpoch(
-                              (chartProvider.rulerStartTime!.millisecondsSinceEpoch + chartProvider.rulerEndTime!.millisecondsSinceEpoch) ~/ 2,
-                            ),
-                            y: (chartProvider.rulerStartPrice! + chartProvider.rulerEndPrice!) / 2,
-                            horizontalAlignment: ChartAlignment.center,
-                            verticalAlignment: ChartAlignment.center,
                           ),
-                      ],
-                      series: <CartesianSeries>[
-                        CandleSeries<ChartData, DateTime>(
-                          animationDuration: 0,
-                          onRendererCreated: (controller) => _chartSeriesController = controller,
-                          dataSource: chartData,
-                          name: currentSymbol,
-                          xValueMapper: (ChartData data, _) => data.date,
-                          lowValueMapper: (ChartData data, _) => data.low,
-                          highValueMapper: (ChartData data, _) => data.high,
-                          openValueMapper: (ChartData data, _) => data.open,
-                          closeValueMapper: (ChartData data, _) => data.close,
-                          enableSolidCandles: true,
-                          bearColor: AppColors.bear,
-                          bullColor: AppColors.bull,
-                        ),
-                        if (chartProvider.rulerStartPrice != null &&
-                            chartProvider.rulerEndPrice != null &&
-                            chartProvider.rulerStartTime != null &&
-                            chartProvider.rulerEndTime != null)
-                          RangeAreaSeries<RulerData, DateTime>(
-                            animationDuration: 0,
-                            dataSource: [
-                              RulerData(
-                                chartProvider.rulerStartTime!,
-                                chartProvider.rulerStartPrice! < chartProvider.rulerEndPrice! ? chartProvider.rulerStartPrice! : chartProvider.rulerEndPrice!,
-                                chartProvider.rulerStartPrice! > chartProvider.rulerEndPrice! ? chartProvider.rulerStartPrice! : chartProvider.rulerEndPrice!,
-                              ),
-                              RulerData(
-                                chartProvider.rulerEndTime!,
-                                chartProvider.rulerStartPrice! < chartProvider.rulerEndPrice! ? chartProvider.rulerStartPrice! : chartProvider.rulerEndPrice!,
-                                chartProvider.rulerStartPrice! > chartProvider.rulerEndPrice! ? chartProvider.rulerStartPrice! : chartProvider.rulerEndPrice!,
-                              ),
-                            ],
-                            xValueMapper: (RulerData data, _) => data.time,
-                            lowValueMapper: (RulerData data, _) => data.low,
-                            highValueMapper: (RulerData data, _) => data.high,
-                            color: (chartProvider.rulerEndPrice! >= chartProvider.rulerStartPrice! ? AppColors.bull : AppColors.bear).withValues(alpha: 0.15),
-                            borderColor: chartProvider.rulerEndPrice! >= chartProvider.rulerStartPrice! ? AppColors.bull : AppColors.bear,
-                            borderWidth: 1.5,
-                          ),
-                      ],
+                        );
+                      }
+                    },
+                    zoomPanBehavior: ZoomPanBehavior(
+                      enablePinching: true,
+                      enablePanning: chartProvider.activeTool == 'none' && _draggingLine == null,
+                      enableMouseWheelZooming: true,
+                      zoomMode: ZoomMode.x,
                     ),
-                  if (chartProvider.isLoading)
-                    const Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary))),
-                  ChartActiveToolChip(
-                    activeTool: chartProvider.activeTool,
-                    hasRulerStart: chartProvider.rulerStartPrice != null,
+                    crosshairBehavior: CrosshairBehavior(
+                      enable: true,
+                      lineType: CrosshairLineType.horizontal,
+                      activationMode: ActivationMode.singleTap,
+                      lineColor: AppColors.primary,
+                      lineWidth: 1,
+                      lineDashArray: const <double>[4, 3],
+                    ),
+                    onActualRangeChanged: (ActualRangeChangedArgs args) {
+                      if (args.axisName == 'primaryYAxis') {
+                        _visibleMinY = args.visibleMin.toDouble();
+                        _visibleMaxY = args.visibleMax.toDouble();
+                      } else if (args.axisName == 'primaryXAxis') {
+                        _visibleMinX = DateTime.fromMillisecondsSinceEpoch(args.visibleMin.toInt());
+                        _visibleMaxX = DateTime.fromMillisecondsSinceEpoch(args.visibleMax.toInt());
+                      }
+                    },
+                    primaryXAxis: DateTimeAxis(
+                      dateFormat: DateFormat.MMMd(),
+                      majorGridLines: const MajorGridLines(color: AppColors.gridLine, width: 0.5),
+                      borderColor: Colors.transparent,
+                      axisLine: const AxisLine(color: AppColors.gridLine),
+                      minimum: _draggingLine != null ? _visibleMinX : null,
+                      maximum: _draggingLine != null ? _visibleMaxX : null,
+                    ),
+                    primaryYAxis: NumericAxis(
+                      opposedPosition: true,
+                      numberFormat: NumberFormat.simpleCurrency(decimalDigits: currentPrice != null && currentPrice < 1.0 ? 4 : 2),
+                      majorGridLines: const MajorGridLines(color: AppColors.gridLine, width: 0.5),
+                      borderColor: Colors.transparent,
+                      axisLine: const AxisLine(color: AppColors.gridLine),
+                      plotBands: plotBands,
+                      minimum: _draggingLine != null ? _visibleMinY : null,
+                      maximum: _draggingLine != null ? _visibleMaxY : null,
+                    ),
+                    annotations: <CartesianChartAnnotation>[
+                      if (chartProvider.rulerStartPrice != null &&
+                          chartProvider.rulerEndPrice != null &&
+                          chartProvider.rulerStartTime != null &&
+                          chartProvider.rulerEndTime != null)
+                        CartesianChartAnnotation(
+                          widget: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: (chartProvider.rulerEndPrice! >= chartProvider.rulerStartPrice! ? AppColors.bull : AppColors.bear).withValues(alpha: 0.85),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '${chartProvider.rulerEndPrice! >= chartProvider.rulerStartPrice! ? '+' : ''}${(((chartProvider.rulerEndPrice! - chartProvider.rulerStartPrice!) / chartProvider.rulerStartPrice!) * 100).toStringAsFixed(2)}%',
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+                            ),
+                          ),
+                          coordinateUnit: CoordinateUnit.point,
+                          x: DateTime.fromMillisecondsSinceEpoch(
+                            ((chartProvider.rulerStartTime!.millisecondsSinceEpoch + chartProvider.rulerEndTime!.millisecondsSinceEpoch) / 2).toInt(),
+                          ),
+                          y: (chartProvider.rulerStartPrice! + chartProvider.rulerEndPrice!) / 2,
+                          horizontalAlignment: ChartAlignment.center,
+                          verticalAlignment: ChartAlignment.center,
+                        ),
+                    ],
+                    series: <CartesianSeries>[
+                      CandleSeries<ChartData, DateTime>(
+                        animationDuration: 0,
+                        onRendererCreated: (controller) => _chartSeriesController = controller,
+                        dataSource: chartData,
+                        name: currentSymbol,
+                        xValueMapper: (ChartData data, _) => data.date,
+                        lowValueMapper: (ChartData data, _) => data.low,
+                        highValueMapper: (ChartData data, _) => data.high,
+                        openValueMapper: (ChartData data, _) => data.open,
+                        closeValueMapper: (ChartData data, _) => data.close,
+                        enableSolidCandles: true,
+                        bearColor: AppColors.bear,
+                        bullColor: AppColors.bull,
+                      ),
+                      if (chartProvider.rulerStartPrice != null &&
+                          chartProvider.rulerEndPrice != null &&
+                          chartProvider.rulerStartTime != null &&
+                          chartProvider.rulerEndTime != null)
+                        RangeAreaSeries<RulerData, DateTime>(
+                          animationDuration: 0,
+                          dataSource: [
+                            RulerData(
+                              chartProvider.rulerStartTime!,
+                              chartProvider.rulerStartPrice! < chartProvider.rulerEndPrice! ? chartProvider.rulerStartPrice! : chartProvider.rulerEndPrice!,
+                              chartProvider.rulerStartPrice! > chartProvider.rulerEndPrice! ? chartProvider.rulerStartPrice! : chartProvider.rulerEndPrice!,
+                            ),
+                            RulerData(
+                              chartProvider.rulerEndTime!,
+                              chartProvider.rulerStartPrice! < chartProvider.rulerEndPrice! ? chartProvider.rulerStartPrice! : chartProvider.rulerEndPrice!,
+                              chartProvider.rulerStartPrice! > chartProvider.rulerEndPrice! ? chartProvider.rulerStartPrice! : chartProvider.rulerEndPrice!,
+                            ),
+                          ],
+                          xValueMapper: (RulerData data, _) => data.time,
+                          lowValueMapper: (RulerData data, _) => data.low,
+                          highValueMapper: (RulerData data, _) => data.high,
+                          color: (chartProvider.rulerEndPrice! >= chartProvider.rulerStartPrice! ? AppColors.bull : AppColors.bear).withValues(alpha: 0.15),
+                          borderColor: chartProvider.rulerEndPrice! >= chartProvider.rulerStartPrice! ? AppColors.bull : AppColors.bear,
+                          borderWidth: 1.5,
+                        ),
+                    ],
                   ),
-                ],
-              ),
+                if (chartProvider.isLoading)
+                  const Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary))),
+                ChartActiveToolChip(
+                  activeTool: chartProvider.activeTool,
+                  hasRulerStart: chartProvider.rulerStartPrice != null,
+                ),
+              ],
             ),
           ),
-          ChartToolbar(
+        ),
+        ChartToolbar(
+          chartProvider: chartProvider,
+          currentExchange: currentExchange,
+          currentSymbol: currentSymbol,
+          onClearAll: () => _showClearAllConfirmDialog(context, chartProvider, currentExchange, currentSymbol),
+        ),
+        Expanded(
+          flex: 1,
+          child: ChartDrawingListPanel(
             chartProvider: chartProvider,
             currentExchange: currentExchange,
             currentSymbol: currentSymbol,
-            onClearAll: () => _showClearAllConfirmDialog(context, chartProvider, currentExchange, currentSymbol),
           ),
-          Expanded(
-            flex: 1,
-            child: ChartDrawingListPanel(
-              chartProvider: chartProvider,
-              currentExchange: currentExchange,
-              currentSymbol: currentSymbol,
-            ),
-          )
-        ],
-      ),
+        )
+      ],
     );
   }
 }

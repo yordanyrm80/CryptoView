@@ -80,6 +80,13 @@ class ChartToolbar extends StatelessWidget {
             tooltip: 'Regla de Medida (% de Ganancia)',
             snackbarMessage: 'Regla de Medida Activa: Toca el precio de inicio y luego el final para medir %.',
           ),
+          _toolButton(
+            context: context,
+            tool: 'place_order',
+            icon: Icons.add_shopping_cart,
+            tooltip: 'Colocar Orden en Gráfico',
+            snackbarMessage: 'Modo Orden: Toca un precio en el gráfico para preparar tu orden.',
+          ),
           IconButton(
             icon: const Icon(Icons.clear, size: 18),
             color: chartProvider.rulerStartPrice != null ? AppColors.bear : AppColors.textMuted,

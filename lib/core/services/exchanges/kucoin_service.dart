@@ -274,4 +274,203 @@ class KucoinService {
 
     return mergedFills;
   }
+
+  /// Fetch level 2 order book (depth) from KuCoin
+  Future<Map<String, dynamic>> fetchOrderBook(String symbol, {int limit = 20}) async {
+    final formattedSymbol = _formatSymbol(symbol);
+    final url = Uri.parse('https://api.kucoin.com/api/v1/market/orderbook/level2_20?symbol=$formattedSymbol');
+    try {
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> root = json.decode(response.body);
+        if (root['code'] == '200000') {
+          final data = root['data'];
+          final List<dynamic> rawBids = data['bids'] ?? [];
+          final List<dynamic> rawAsks = data['asks'] ?? [];
+
+          final List<List<double>> bids = rawBids.map<List<double>>((b) => [
+            double.parse(b[0].toString()),
+            double.parse(b[1].toString()),
+          ]).toList();
+
+          final List<List<double>> asks = rawAsks.map<List<double>>((a) => [
+            double.parse(a[0].toString()),
+            double.parse(a[1].toString()),
+          ]).toList();
+
+          return {'bids': bids, 'asks': asks};
+        }
+      }
+    } catch (_) {}
+    return {'bids': <List<double>>[], 'asks': <List<double>>[]};
+  }
+
+  /// Fetch public recent trades from KuCoin
+  Future<List<Map<String, dynamic>>> fetchRecentTrades(String symbol, {int limit = 50}) async {
+    final formattedSymbol = _formatSymbol(symbol);
+    final url = Uri.parse('https://api.kucoin.com/api/v1/market/histories?symbol=$formattedSymbol');
+    try {
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> root = json.decode(response.body);
+        if (root['code'] == '200000') {
+          final List<dynamic> data = root['data'] ?? [];
+          return data.take(limit).map<Map<String, dynamic>>((t) => {
+            'price': double.parse(t['price'].toString()),
+            'size': double.parse(t['size'].toString()),
+            'side': t['side'].toString().toLowerCase(),
+            'time': ((t['time'] as num).toInt() ~/ 1000000), // ms
+          }).toList();
+        }
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  /// Fetch open active orders from KuCoin
+  Future<List<Map<String, dynamic>>> fetchOpenOrders({
+    required String apiKey,
+    required String apiSecret,
+    required String apiPassphrase,
+    String? symbol,
+  }) async {
+    final now = DateTime.now().millisecondsSinceEpoch.toString();
+    String requestPath = '/api/v1/orders?status=active';
+    if (symbol != null && symbol.isNotEmpty) {
+      requestPath += '&symbol=${_formatSymbol(symbol)}';
+    }
+    final signature = _generateSignature(apiSecret, now, 'GET', requestPath, '');
+    final passphraseSigned = _generatePassphrase(apiSecret, apiPassphrase);
+
+    final url = Uri.parse('https://api.kucoin.com$requestPath');
+    try {
+      final response = await http.get(url, headers: {
+        'KC-API-KEY': apiKey,
+        'KC-API-SIGN': signature,
+        'KC-API-TIMESTAMP': now,
+        'KC-API-PASSPHRASE': passphraseSigned,
+        'KC-API-KEY-VERSION': '2',
+      });
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> root = json.decode(response.body);
+        if (root['code'] == '200000') {
+          final List<dynamic> items = root['data']['items'] ?? [];
+          return items.map<Map<String, dynamic>>((o) => {
+            'id': o['id'].toString(),
+            'symbol': o['symbol'].toString().replaceAll('-', '/'),
+            'side': o['side'].toString().toLowerCase(),
+            'type': o['type'].toString().toLowerCase(),
+            'price': double.tryParse(o['price'].toString()) ?? 0.0,
+            'size': double.tryParse(o['size'].toString()) ?? 0.0,
+            'dealSize': double.tryParse(o['dealSize'].toString()) ?? 0.0,
+            'funds': double.tryParse(o['funds']?.toString() ?? '0') ?? 0.0,
+            'createdAt': (o['createdAt'] as num).toInt(),
+          }).toList();
+        }
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  /// Place a limit or market order on KuCoin
+  Future<Map<String, dynamic>> placeOrder({
+    required String apiKey,
+    required String apiSecret,
+    required String apiPassphrase,
+    required String symbol,
+    required String side, // 'buy' or 'sell'
+    required String type, // 'limit' or 'market'
+    double? price,
+    double? size,
+    double? funds,
+  }) async {
+    final now = DateTime.now().millisecondsSinceEpoch.toString();
+    const requestPath = '/api/v1/orders';
+    final clientOid = '${DateTime.now().millisecondsSinceEpoch}-${DateTime.now().microsecond}';
+
+    final Map<String, dynamic> payload = {
+      'clientOid': clientOid,
+      'side': side.toLowerCase(),
+      'symbol': _formatSymbol(symbol),
+      'type': type.toLowerCase(),
+    };
+
+    if (type.toLowerCase() == 'limit') {
+      if (price == null || price <= 0 || size == null || size <= 0) {
+        throw Exception('Precio y cantidad son requeridos para órdenes límite.');
+      }
+      payload['price'] = price.toString();
+      payload['size'] = size.toString();
+    } else {
+      // market
+      if (side.toLowerCase() == 'buy') {
+        if (funds != null && funds > 0) {
+          payload['funds'] = funds.toString();
+        } else if (size != null && size > 0) {
+          payload['size'] = size.toString();
+        }
+      } else {
+        if (size != null && size > 0) {
+          payload['size'] = size.toString();
+        }
+      }
+    }
+
+    final bodyStr = json.encode(payload);
+    final signature = _generateSignature(apiSecret, now, 'POST', requestPath, bodyStr);
+    final passphraseSigned = _generatePassphrase(apiSecret, apiPassphrase);
+
+    final url = Uri.parse('https://api.kucoin.com$requestPath');
+    final response = await http.post(
+      url,
+      headers: {
+        'KC-API-KEY': apiKey,
+        'KC-API-SIGN': signature,
+        'KC-API-TIMESTAMP': now,
+        'KC-API-PASSPHRASE': passphraseSigned,
+        'KC-API-KEY-VERSION': '2',
+        'Content-Type': 'application/json',
+      },
+      body: bodyStr,
+    );
+
+    final Map<String, dynamic> root = json.decode(response.body);
+    if (root['code'] == '200000') {
+      return root['data'] ?? {};
+    } else {
+      throw Exception(root['msg'] ?? 'Error al colocar orden en KuCoin (${root['code']})');
+    }
+  }
+
+  /// Cancel an active order on KuCoin
+  Future<bool> cancelOrder({
+    required String apiKey,
+    required String apiSecret,
+    required String apiPassphrase,
+    required String orderId,
+  }) async {
+    final now = DateTime.now().millisecondsSinceEpoch.toString();
+    final requestPath = '/api/v1/orders/$orderId';
+    final signature = _generateSignature(apiSecret, now, 'DELETE', requestPath, '');
+    final passphraseSigned = _generatePassphrase(apiSecret, apiPassphrase);
+
+    final url = Uri.parse('https://api.kucoin.com$requestPath');
+    final response = await http.delete(
+      url,
+      headers: {
+        'KC-API-KEY': apiKey,
+        'KC-API-SIGN': signature,
+        'KC-API-TIMESTAMP': now,
+        'KC-API-PASSPHRASE': passphraseSigned,
+        'KC-API-KEY-VERSION': '2',
+      },
+    );
+
+    final Map<String, dynamic> root = json.decode(response.body);
+    if (root['code'] == '200000') {
+      return true;
+    } else {
+      throw Exception(root['msg'] ?? 'Error al cancelar orden en KuCoin (${root['code']})');
+    }
+  }
 }

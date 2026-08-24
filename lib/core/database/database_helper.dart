@@ -331,14 +331,16 @@ class DatabaseHelper {
     final db = await instance.database;
     final results = await db.query(
       'api_keys',
-      where: 'exchange = ?',
-      whereArgs: [exchange],
+      where: 'LOWER(exchange) = ?',
+      whereArgs: [exchange.toLowerCase()],
     );
     if (results.isNotEmpty) {
       return results.first;
     }
     return null;
   }
+
+  Future<Map<String, dynamic>?> getApiKey(String exchange) => queryApiKey(exchange);
 
   Future<int> deleteApiKey(String exchange) async {
     final db = await instance.database;

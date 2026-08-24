@@ -120,4 +120,121 @@ class ExchangeService {
     startAt: startAt,
     onProgress: onProgress,
   );
+
+  /// Fetch order book level 2 from specified exchange
+  Future<Map<String, dynamic>> fetchOrderBook(String exchange, String symbol, {int limit = 20}) async {
+    final ex = exchange.toLowerCase();
+    if (ex == 'kucoin') {
+      return await _kucoin.fetchOrderBook(symbol, limit: limit);
+    } else if (ex == 'binance') {
+      return await _binance.fetchOrderBook(symbol, limit: limit);
+    }
+    return {'bids': <List<double>>[], 'asks': <List<double>>[]};
+  }
+
+  /// Fetch recent public trades from specified exchange
+  Future<List<Map<String, dynamic>>> fetchRecentTrades(String exchange, String symbol, {int limit = 50}) async {
+    final ex = exchange.toLowerCase();
+    if (ex == 'kucoin') {
+      return await _kucoin.fetchRecentTrades(symbol, limit: limit);
+    } else if (ex == 'binance') {
+      return await _binance.fetchRecentTrades(symbol, limit: limit);
+    }
+    return [];
+  }
+
+  /// Fetch active open orders from specified exchange
+  Future<List<Map<String, dynamic>>> fetchOpenOrders({
+    required String exchange,
+    required String apiKey,
+    required String apiSecret,
+    String? apiPassphrase,
+    String? symbol,
+  }) async {
+    final ex = exchange.toLowerCase();
+    if (ex == 'kucoin') {
+      return await _kucoin.fetchOpenOrders(
+        apiKey: apiKey,
+        apiSecret: apiSecret,
+        apiPassphrase: apiPassphrase ?? '',
+        symbol: symbol,
+      );
+    } else if (ex == 'binance') {
+      return await _binance.fetchOpenOrders(
+        apiKey: apiKey,
+        apiSecret: apiSecret,
+        symbol: symbol,
+      );
+    }
+    return [];
+  }
+
+  /// Place limit/market order on specified exchange
+  Future<Map<String, dynamic>> placeOrder({
+    required String exchange,
+    required String apiKey,
+    required String apiSecret,
+    String? apiPassphrase,
+    required String symbol,
+    required String side, // 'buy' or 'sell'
+    required String type, // 'limit' or 'market'
+    double? price,
+    double? size,
+    double? funds,
+  }) async {
+    final ex = exchange.toLowerCase();
+    if (ex == 'kucoin') {
+      return await _kucoin.placeOrder(
+        apiKey: apiKey,
+        apiSecret: apiSecret,
+        apiPassphrase: apiPassphrase ?? '',
+        symbol: symbol,
+        side: side,
+        type: type,
+        price: price,
+        size: size,
+        funds: funds,
+      );
+    } else if (ex == 'binance') {
+      return await _binance.placeOrder(
+        apiKey: apiKey,
+        apiSecret: apiSecret,
+        symbol: symbol,
+        side: side,
+        type: type,
+        price: price,
+        size: size,
+        funds: funds,
+      );
+    }
+    throw Exception('Exchange $exchange no soporta colocación directa de órdenes aún.');
+  }
+
+  /// Cancel active order on specified exchange
+  Future<bool> cancelOrder({
+    required String exchange,
+    required String apiKey,
+    required String apiSecret,
+    String? apiPassphrase,
+    required String orderId,
+    required String symbol,
+  }) async {
+    final ex = exchange.toLowerCase();
+    if (ex == 'kucoin') {
+      return await _kucoin.cancelOrder(
+        apiKey: apiKey,
+        apiSecret: apiSecret,
+        apiPassphrase: apiPassphrase ?? '',
+        orderId: orderId,
+      );
+    } else if (ex == 'binance') {
+      return await _binance.cancelOrder(
+        apiKey: apiKey,
+        apiSecret: apiSecret,
+        symbol: symbol,
+        orderId: orderId,
+      );
+    }
+    return false;
+  }
 }

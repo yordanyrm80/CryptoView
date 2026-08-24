@@ -16,6 +16,8 @@ import 'features/exchanges/presentation/exchanges_screen.dart';
 
 import 'features/settings/providers/settings_provider.dart';
 import 'features/settings/presentation/settings_screen.dart';
+import 'features/orderbook/providers/orderbook_provider.dart';
+import 'features/trading/providers/trading_provider.dart';
 
 import 'core/widgets/panel_resize_handle.dart';
 
@@ -35,6 +37,8 @@ void main() {
         ChangeNotifierProvider(create: (_) => ChartProvider()),
         ChangeNotifierProvider(create: (_) => TrackerProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
+        ChangeNotifierProvider(create: (_) => OrderBookProvider()),
+        ChangeNotifierProvider(create: (_) => TradingProvider()),
       ],
       child: const MyApp(),
     ),

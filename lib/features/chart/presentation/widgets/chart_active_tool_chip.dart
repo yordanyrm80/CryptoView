@@ -31,7 +31,11 @@ class ChartActiveToolChip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              activeTool == 'horizontal_line' ? Icons.border_horizontal : Icons.square_foot,
+              activeTool == 'horizontal_line'
+                  ? Icons.border_horizontal
+                  : activeTool == 'place_order'
+                      ? Icons.add_shopping_cart
+                      : Icons.square_foot,
               color: AppColors.background,
               size: 14,
             ),
@@ -39,9 +43,11 @@ class ChartActiveToolChip extends StatelessWidget {
             Text(
               activeTool == 'horizontal_line'
                   ? 'DIBUJO: LÍNEA HORIZONTAL'
-                  : !hasRulerStart
-                      ? 'REGLA: MARCA INICIO'
-                      : 'REGLA: MARCA FIN',
+                  : activeTool == 'place_order'
+                      ? 'ORDEN: TOCA UN PRECIO EN EL GRÁFICO'
+                      : !hasRulerStart
+                          ? 'REGLA: MARCA INICIO'
+                          : 'REGLA: MARCA FIN',
               style: const TextStyle(
                 color: AppColors.background,
                 fontWeight: FontWeight.bold,
