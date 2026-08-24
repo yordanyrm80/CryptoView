@@ -130,6 +130,51 @@ class SettingsScreen extends StatelessWidget {
                   onVisibilityChanged: (val) => settingsProvider.setShowCurrentPriceLine(val),
                   onColorSelected: (hex) => settingsProvider.setCurrentPriceColor(hex),
                 ),
+                const SizedBox(height: 16),
+
+                // 5. User Drawings Visibility
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.card,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.edit_road, color: AppColors.primary, size: 20),
+                      ),
+                      const SizedBox(width: 14),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Mis Líneas Guardadas (Trazos Manuales)',
+                              style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Muestra u oculta todas tus líneas horizontales y mediciones en el gráfico',
+                              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: settingsProvider.showDrawings,
+                        activeColor: AppColors.primary,
+                        onChanged: (val) => settingsProvider.setShowDrawings(val),
+                      ),
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 20),
 
                 // 5. Quick Link to Exchanges

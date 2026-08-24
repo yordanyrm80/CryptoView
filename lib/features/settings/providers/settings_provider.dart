@@ -14,6 +14,7 @@ class SettingsProvider with ChangeNotifier {
   bool _showBuyLines = true;
   bool _showSellLines = true;
   bool _showCurrentPriceLine = true;
+  bool _showDrawings = true;
 
   double _watchlistWidth = 300.0;
   double _trackerWidth = 380.0;
@@ -31,6 +32,7 @@ class SettingsProvider with ChangeNotifier {
   bool get showBuyLines => _showBuyLines;
   bool get showSellLines => _showSellLines;
   bool get showCurrentPriceLine => _showCurrentPriceLine;
+  bool get showDrawings => _showDrawings;
   double get watchlistWidth => _watchlistWidth;
   double get trackerWidth => _trackerWidth;
   bool get isLoaded => _isLoaded;
@@ -65,6 +67,9 @@ class SettingsProvider with ChangeNotifier {
 
       final showCurrentPriceStr = await db.getGeneralSetting('show_current_price_line', defaultValue: '1');
       _showCurrentPriceLine = showCurrentPriceStr == '1';
+
+      final showDrawingsStr = await db.getGeneralSetting('show_drawings', defaultValue: '1');
+      _showDrawings = showDrawingsStr == '1';
 
       final wWidthStr = await db.getGeneralSetting('watchlist_width', defaultValue: '300.0');
       _watchlistWidth = double.tryParse(wWidthStr ?? '300.0') ?? 300.0;
@@ -127,6 +132,12 @@ class SettingsProvider with ChangeNotifier {
     await DatabaseHelper.instance.setGeneralSetting('show_current_price_line', show ? '1' : '0');
   }
 
+  Future<void> setShowDrawings(bool show) async {
+    _showDrawings = show;
+    notifyListeners();
+    await DatabaseHelper.instance.setGeneralSetting('show_drawings', show ? '1' : '0');
+  }
+
   Future<void> resetToDefaults() async {
     _buyLineColorHex = defaultBuyLineColor;
     _sellLineColorHex = defaultSellLineColor;
@@ -134,6 +145,7 @@ class SettingsProvider with ChangeNotifier {
     _showBuyLines = true;
     _showSellLines = true;
     _showCurrentPriceLine = true;
+    _showDrawings = true;
     notifyListeners();
 
     final db = DatabaseHelper.instance;
@@ -143,5 +155,6 @@ class SettingsProvider with ChangeNotifier {
     await db.setGeneralSetting('show_buy_lines', '1');
     await db.setGeneralSetting('show_sell_lines', '1');
     await db.setGeneralSetting('show_current_price_line', '1');
+    await db.setGeneralSetting('show_drawings', '1');
   }
 }

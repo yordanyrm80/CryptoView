@@ -16,6 +16,7 @@ import 'widgets/chart_drawing_dialog.dart';
 import 'widgets/chart_active_tool_chip.dart';
 import 'widgets/chart_toolbar.dart';
 import 'widgets/chart_drawing_list_panel.dart';
+import 'widgets/chart_layer_filter_bar.dart';
 
 class ChartScreen extends StatefulWidget {
   const ChartScreen({Key? key}) : super(key: key);
@@ -207,25 +208,27 @@ class _ChartScreenState extends State<ChartScreen> {
       );
     }).toList();
 
-    final List<PlotBand> plotBands = chartProvider.drawings.map<PlotBand>((d) {
-      final double price = d['price'];
-      final String colorHex = d['color'];
-      final String label = d['label'];
-      final int colorVal = int.parse(colorHex.replaceFirst('#', '0xFF'));
+    final List<PlotBand> plotBands = settingsProvider.showDrawings
+        ? chartProvider.drawings.map<PlotBand>((d) {
+            final double price = d['price'];
+            final String colorHex = d['color'];
+            final String label = d['label'];
+            final int colorVal = int.parse(colorHex.replaceFirst('#', '0xFF'));
 
-      return PlotBand(
-        isVisible: true,
-        start: price,
-        end: price,
-        borderColor: Color(colorVal),
-        borderWidth: 1.5,
-        dashArray: const <double>[6, 4],
-        text: '  $label: \$${price.toStringAsFixed(2)}',
-        textStyle: const TextStyle(color: AppColors.textPrimary, fontSize: 10, fontWeight: FontWeight.bold),
-        horizontalTextAlignment: TextAnchor.start,
-        verticalTextAlignment: TextAnchor.middle,
-      );
-    }).toList();
+            return PlotBand(
+              isVisible: true,
+              start: price,
+              end: price,
+              borderColor: Color(colorVal),
+              borderWidth: 1.5,
+              dashArray: const <double>[6, 4],
+              text: '  $label: \$${price.toStringAsFixed(2)}',
+              textStyle: const TextStyle(color: AppColors.textPrimary, fontSize: 10, fontWeight: FontWeight.bold),
+              horizontalTextAlignment: TextAnchor.start,
+              verticalTextAlignment: TextAnchor.middle,
+            );
+          }).toList()
+        : [];
 
     // 1. Current Market Price Line
     if (settingsProvider.showCurrentPriceLine && currentPrice != null && currentPrice > 0) {
@@ -382,6 +385,9 @@ class _ChartScreenState extends State<ChartScreen> {
             chartProvider: chartProvider,
             currentExchange: currentExchange,
             currentSymbol: currentSymbol,
+          ),
+          ChartLayerFilterBar(
+            settingsProvider: settingsProvider,
           ),
           Expanded(
             flex: 3,
