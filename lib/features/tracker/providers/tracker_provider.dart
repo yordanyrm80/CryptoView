@@ -306,6 +306,15 @@ class TrackerProvider extends ChangeNotifier {
     await loadData();
   }
 
+  /// Manually dismiss / close dust residual for a transaction (marks as fully matched/closed)
+  Future<void> dismissDust(TransactionModel tx) async {
+    if (tx.id == null) return;
+    await DatabaseHelper.instance.updateTransaction(
+      tx.copyWith(isMatched: true).toMap(),
+    );
+    await loadData();
+  }
+
   // --- API Credentials Operations ---
 
   Future<Map<String, dynamic>?> getCredentials(String exchange) async {

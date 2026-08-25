@@ -31,6 +31,86 @@ class TransactionTile extends StatelessWidget {
     return s;
   }
 
+  void _confirmDismissDust(BuildContext context, double remaining, String baseAsset, double remainingQuoteValue, String quoteAsset) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.cleaning_services, color: AppColors.secondary, size: 20),
+            SizedBox(width: 8),
+            Text('Liquidar Polvillo', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '¿Deseas dar por liquidado y cerrado el remanente de ${_formatAmount(remaining)} $baseAsset (~\$${remainingQuoteValue.toStringAsFixed(2)} $quoteAsset)?',
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline, color: AppColors.secondary, size: 16),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Esta compra saldrá de Compras Abiertas y quedará 100% conciliada en tu historial.',
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 11),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar', style: TextStyle(color: AppColors.textMuted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.secondary,
+              foregroundColor: AppColors.background,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await provider.dismissDust(tx);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    backgroundColor: AppColors.surface,
+                    content: Text(
+                      'Remanente de ${_formatAmount(remaining)} $baseAsset liquidado y compra cerrada con éxito.',
+                      style: const TextStyle(color: AppColors.textPrimary),
+                    ),
+                  ),
+                );
+              }
+            },
+            child: const Text('Liquidar y Cerrar', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isBuy = tx.type == 'buy';
@@ -321,7 +401,7 @@ class TransactionTile extends StatelessWidget {
               const Divider(color: AppColors.border, height: 1),
               const SizedBox(height: 8),
 
-              // Row 3: Available (Disp in USDT and Base) | Match Button & Date
+              // Row 3: Available (Disp in USDT and Base) | Match Button & Dust Liquidation
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -346,20 +426,40 @@ class TransactionTile extends StatelessWidget {
                       Text('${tx.exchange} · $dateStr', style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
                     ],
                   ),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-                      foregroundColor: AppColors.primary,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                      minimumSize: const Size(75, 32),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        side: const BorderSide(color: AppColors.primary, width: 1),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isPartiallyMatched || remainingQuoteValue < 5.0) ...[
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.secondary,
+                            side: BorderSide(color: AppColors.secondary.withValues(alpha: 0.6)),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                            minimumSize: const Size(60, 32),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: () => _confirmDismissDust(context, remaining, baseAsset, remainingQuoteValue, quoteAsset),
+                          icon: const Icon(Icons.cleaning_services, size: 13),
+                          label: const Text('Polvillo', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary.withValues(alpha: 0.15),
+                          foregroundColor: AppColors.primary,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                          minimumSize: const Size(75, 32),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: const BorderSide(color: AppColors.primary, width: 1),
+                          ),
+                        ),
+                        onPressed: onSelectForMatch,
+                        icon: const Icon(Icons.link, size: 14),
+                        label: const Text('Casar', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                       ),
-                    ),
-                    onPressed: onSelectForMatch,
-                    icon: const Icon(Icons.link, size: 14),
-                    label: const Text('Casar', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    ],
                   ),
                 ],
               ),

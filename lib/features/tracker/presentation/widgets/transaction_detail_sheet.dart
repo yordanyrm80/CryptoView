@@ -366,6 +366,32 @@ class TransactionDetailSheet extends StatelessWidget {
                 icon: const Icon(Icons.delete, size: 16),
                 label: const Text('Eliminar'),
               ),
+              if (remaining > 0 && (remaining < tx.amount || (tx.price * remaining) < 5.0)) ...[
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.secondary,
+                    side: const BorderSide(color: AppColors.secondary),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: () async {
+                    await provider.dismissDust(tx);
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          backgroundColor: AppColors.surface,
+                          content: Text(
+                            'Remanente de ${_formatAmount(remaining)} $baseAsset liquidado y compra cerrada con éxito.',
+                            style: const TextStyle(color: AppColors.textPrimary),
+                          ),
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.cleaning_services, size: 14),
+                  label: const Text('Liquidar Polvillo', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
