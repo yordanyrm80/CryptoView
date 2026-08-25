@@ -370,7 +370,7 @@ class DatabaseHelper {
       {
         'exchange': exchange,
         'symbol': symbol,
-        'last_sync_date': date.toIso8601String(),
+        'last_sync_date': date.toUtc().toIso8601String(),
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );

@@ -19,6 +19,20 @@ class ChartProvider extends ChangeNotifier {
   DateTime? _rulerEndTime;
   double? _rulerPercent;
 
+  ChartProvider() {
+    _loadSavedTimeframe();
+  }
+
+  Future<void> _loadSavedTimeframe() async {
+    try {
+      final tf = await DatabaseHelper.instance.getGeneralSetting('chart_timeframe');
+      if (tf != null && tf.isNotEmpty) {
+        _activeInterval = tf;
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
   List<Map<String, dynamic>> get candles => _candles;
   List<Map<String, dynamic>> get drawings => _drawings;
   bool get isLoading => _isLoading;
@@ -124,6 +138,7 @@ class ChartProvider extends ChangeNotifier {
   // Change interval dynamically
   Future<void> changeInterval(String newInterval, String exchange, String symbol) async {
     _activeInterval = newInterval;
+    DatabaseHelper.instance.setGeneralSetting('chart_timeframe', newInterval);
     await loadChartData(exchange, symbol);
   }
 
