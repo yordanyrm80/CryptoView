@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/services/exchanges/exchange_service.dart';
@@ -6,7 +7,7 @@ import '../../../core/services/exchanges/exchange_service.dart';
 class WatchlistProvider extends ChangeNotifier {
   String _currentExchange = 'KuCoin';
   String _selectedSymbol = 'ETH/USDT';
-  final List<String> _symbols = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'XRP/USDT', 'ADA/USDT'];
+  List<String> _symbols = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'XRP/USDT', 'ADA/USDT'];
   final Set<String> _favoriteSymbols = {'BTC/USDT', 'ETH/USDT'};
   final Map<String, double> _prices = {};
   bool _isLoading = false;
@@ -21,25 +22,60 @@ class WatchlistProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
 
   WatchlistProvider() {
-    _loadFavorites();
+    _initWatchlist();
+  }
+
+  Future<void> _initWatchlist() async {
+    await _loadWatchlistState();
     startPricePolling();
   }
 
-  Future<void> _loadFavorites() async {
+  Future<void> _loadWatchlistState() async {
     try {
-      final saved = await DatabaseHelper.instance.queryFavorites();
-      if (saved.isNotEmpty) {
-        _favoriteSymbols.clear();
-        _favoriteSymbols.addAll(saved);
-        notifyListeners();
+      final db = DatabaseHelper.instance;
+
+      // 1. Load Watchlist Symbols
+      final savedSymbolsJson = await db.getGeneralSetting('watchlist_symbols');
+      if (savedSymbolsJson != null && savedSymbolsJson.isNotEmpty) {
+        try {
+          final List<dynamic> decoded = jsonDecode(savedSymbolsJson);
+          if (decoded.isNotEmpty) {
+            _symbols = decoded.map((e) => e.toString()).toList();
+          }
+        } catch (_) {}
       } else {
-        // Seed default favorites
+        // Save initial default symbols
+        await db.setGeneralSetting('watchlist_symbols', jsonEncode(_symbols));
+      }
+
+      // 2. Load Selected Exchange
+      final savedExchange = await db.getGeneralSetting('selected_exchange');
+      if (savedExchange != null && savedExchange.isNotEmpty) {
+        _currentExchange = savedExchange;
+      }
+
+      // 3. Load Selected Symbol
+      final savedSymbol = await db.getGeneralSetting('selected_symbol');
+      if (savedSymbol != null && savedSymbol.isNotEmpty && _symbols.contains(savedSymbol)) {
+        _selectedSymbol = savedSymbol;
+      } else if (_symbols.isNotEmpty && !_symbols.contains(_selectedSymbol)) {
+        _selectedSymbol = _symbols.first;
+      }
+
+      // 4. Load Favorites
+      final savedFavs = await db.queryFavorites();
+      if (savedFavs.isNotEmpty) {
+        _favoriteSymbols.clear();
+        _favoriteSymbols.addAll(savedFavs);
+      } else {
         for (var s in ['BTC/USDT', 'ETH/USDT']) {
-          await DatabaseHelper.instance.addFavorite(s);
+          await db.addFavorite(s);
         }
       }
+
+      notifyListeners();
     } catch (e) {
-      // Ignored
+      debugPrint('Error loading watchlist state: $e');
     }
   }
 
@@ -62,6 +98,7 @@ class WatchlistProvider extends ChangeNotifier {
     _currentExchange = newExchange;
     _prices.clear(); // Reset cached prices for the new exchange
     notifyListeners();
+    DatabaseHelper.instance.setGeneralSetting('selected_exchange', newExchange);
     fetchCurrentPrices();
   }
 
@@ -70,6 +107,7 @@ class WatchlistProvider extends ChangeNotifier {
     if (_selectedSymbol == newSymbol) return;
     _selectedSymbol = newSymbol;
     notifyListeners();
+    DatabaseHelper.instance.setGeneralSetting('selected_symbol', newSymbol);
   }
 
   // Add pair to watchlist
@@ -86,6 +124,7 @@ class WatchlistProvider extends ChangeNotifier {
     if (!_symbols.contains(formatted)) {
       _symbols.add(formatted);
       notifyListeners();
+      DatabaseHelper.instance.setGeneralSetting('watchlist_symbols', jsonEncode(_symbols));
       fetchCurrentPrices();
     }
   }
@@ -99,9 +138,11 @@ class WatchlistProvider extends ChangeNotifier {
       // If we deleted the currently selected symbol, select another one
       if (_selectedSymbol == symbol && _symbols.isNotEmpty) {
         _selectedSymbol = _symbols.first;
+        DatabaseHelper.instance.setGeneralSetting('selected_symbol', _selectedSymbol);
       }
       
       notifyListeners();
+      DatabaseHelper.instance.setGeneralSetting('watchlist_symbols', jsonEncode(_symbols));
     }
   }
 
