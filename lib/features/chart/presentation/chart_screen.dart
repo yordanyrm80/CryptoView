@@ -38,7 +38,6 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
   String? _lastLoadedSymbol;
   String? _lastLoadedExchange;
   String? _lastLoadedInterval;
-  int? _lastLoadGeneration;
   bool _hasUserZoomedOrPanned = false;
   bool _isTriggeringHistoryLoad = false;
   double? _userZoomFactor;
@@ -53,9 +52,10 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
     if (args.axis?.name == 'primaryXAxis') {
       _userZoomFactor = args.currentZoomFactor;
       _userZoomPosition = args.currentZoomPosition;
-      _hasUserZoomedOrPanned = true;
-      if (args.currentZoomPosition <= 0.08 && !_isTriggeringHistoryLoad) {
-        _checkAndLoadMoreHistory();
+      if (!_hasUserZoomedOrPanned) {
+        setState(() {
+          _hasUserZoomedOrPanned = true;
+        });
       }
     }
   }
@@ -64,8 +64,12 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
     if (args.axis?.name == 'primaryXAxis') {
       _userZoomFactor = args.currentZoomFactor;
       _userZoomPosition = args.currentZoomPosition;
-      _hasUserZoomedOrPanned = true;
-      if (args.currentZoomPosition <= 0.08 && !_isTriggeringHistoryLoad) {
+      if (!_hasUserZoomedOrPanned) {
+        setState(() {
+          _hasUserZoomedOrPanned = true;
+        });
+      }
+      if (args.currentZoomPosition <= 0.05 && !_isTriggeringHistoryLoad) {
         _checkAndLoadMoreHistory();
       }
     }
@@ -384,12 +388,10 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
 
     if (_lastLoadedSymbol != currentSymbol ||
         _lastLoadedExchange != currentExchange ||
-        _lastLoadedInterval != chartProvider.activeInterval ||
-        _lastLoadGeneration != chartProvider.loadGeneration) {
+        _lastLoadedInterval != chartProvider.activeInterval) {
       _lastLoadedSymbol = currentSymbol;
       _lastLoadedExchange = currentExchange;
       _lastLoadedInterval = chartProvider.activeInterval;
-      _lastLoadGeneration = chartProvider.loadGeneration;
       _hasUserZoomedOrPanned = false;
       _userZoomFactor = null;
       _userZoomPosition = null;
@@ -740,7 +742,6 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
                   )
                 else
                   SfCartesianChart(
-                    key: ValueKey('$currentExchange:$currentSymbol:${chartProvider.activeInterval}:${chartProvider.loadGeneration}'),
                     backgroundColor: const Color(0xFF0B0E11),
                     plotAreaBorderWidth: 0,
                     onChartTouchInteractionDown: (ChartTouchInteractionArgs args) {
