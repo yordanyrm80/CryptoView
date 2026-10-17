@@ -143,4 +143,96 @@ class CloudApiService {
       return false;
     }
   }
+
+  /// Sincroniza órdenes directamente desde el servidor Cloud conectándose al exchange (`POST /api/v1/trades/sync`)
+  Future<Map<String, dynamic>> syncTrades(
+    String exchange, {
+    String? symbol,
+    int days = 1,
+  }) async {
+    try {
+      final ex = exchange.trim().toLowerCase();
+      String url = '$baseUrl/api/v1/trades/sync?exchange=$ex&days=$days';
+      if (symbol != null && symbol.trim().isNotEmpty) {
+        url += '&symbol=${Uri.encodeComponent(symbol.trim().toUpperCase())}';
+      }
+      final uri = Uri.parse(url);
+      final response = await http.post(uri, headers: _authHeaders).timeout(const Duration(seconds: 25));
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      debugPrint('[CloudApiService] Error en syncTrades ($exchange, $symbol, days=$days): $e');
+    }
+    return {'status': 'error', 'new_trades_count': 0, 'new_trades': []};
+  }
+
+  /// Obtiene trades almacenados en la base de datos central (`GET /api/v1/trades`)
+  Future<List<Map<String, dynamic>>> fetchTrades({
+    String? exchange,
+    String? symbol,
+    bool onlyOpen = false,
+    int limit = 100,
+  }) async {
+    try {
+      String url = '$baseUrl/api/v1/trades?limit=$limit&only_open=$onlyOpen';
+      if (exchange != null && exchange.isNotEmpty) {
+        url += '&exchange=${exchange.trim().toLowerCase()}';
+      }
+      if (symbol != null && symbol.isNotEmpty) {
+        url += '&symbol=${Uri.encodeComponent(symbol.trim().toUpperCase())}';
+      }
+      final uri = Uri.parse(url);
+      final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        return data.cast<Map<String, dynamic>>();
+      }
+    } catch (e) {
+      debugPrint('[CloudApiService] Error en fetchTrades: $e');
+    }
+    return [];
+  }
+
+  /// Obtiene los últimos precios en vivo de todas las monedas activas (`GET /api/v1/candles/tickers`)
+  Future<List<Map<String, dynamic>>> fetchTickers() async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/v1/candles/tickers');
+      final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 6));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        return data.cast<Map<String, dynamic>>();
+      }
+    } catch (e) {
+      debugPrint('[CloudApiService] Error en fetchTickers: $e');
+    }
+    return [];
+  }
+
+  /// Sincroniza retiros y gastos desde el exchange en el servidor Cloud (`POST /api/v1/withdrawals/sync`)
+  Future<Map<String, dynamic>> syncWithdrawals(
+    String exchange, {
+    String? currency,
+    int days = 30,
+  }) async {
+    try {
+      final ex = exchange.trim().toLowerCase();
+      String url = '$baseUrl/api/v1/withdrawals/sync?exchange=$ex&days=$days';
+      if (currency != null && currency.isNotEmpty) {
+        url += '&currency=${currency.trim().toUpperCase()}';
+      }
+      final uri = Uri.parse(url);
+      final response = await http.post(uri, headers: _authHeaders).timeout(const Duration(seconds: 20));
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      debugPrint('[CloudApiService] Error en syncWithdrawals: $e');
+    }
+    return {'status': 'error', 'new_withdrawals_count': 0};
+  }
 }

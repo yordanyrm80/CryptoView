@@ -755,42 +755,70 @@ class TrackerProvider extends ChangeNotifier {
     try {
       List<Map<String, dynamic>> fills = [];
 
-      void handleProgress(double progress, String statusMessage, int foundCount) {
-        if (updateProviderState) {
-          _importProgress = progress;
-          _importStatusMessage = statusMessage;
-          _importFoundCount = foundCount;
-          notifyListeners();
+      // 1. Intentar primero sincronización delegada en Cloud API (alta velocidad y centralizada)
+      try {
+        final cloudSync = await CloudApiService.instance.syncTrades(
+          exchange,
+          symbol: symbol,
+          days: lookbackDays,
+        );
+        if (cloudSync['status'] == 'ok') {
+          final List<dynamic> cloudTrades = cloudSync['new_trades'] ?? [];
+          for (var t in cloudTrades) {
+            final tradeMap = t as Map<String, dynamic>;
+            final tTime = DateTime.parse(tradeMap['time'] as String).toUtc();
+            fills.add({
+              'side': tradeMap['side'],
+              'price': (tradeMap['price'] as num).toDouble(),
+              'amount': (tradeMap['amount'] as num).toDouble(),
+              'fee': (tradeMap['fee'] as num).toDouble(),
+              'createdAt': tTime.millisecondsSinceEpoch,
+            });
+          }
         }
+      } catch (e) {
+        debugPrint('[TrackerProvider] Fallback a sincronización local directa: $e');
       }
 
-      if (exchange.toLowerCase() == 'kucoin') {
-        fills = await ExchangeService.instance.fetchKucoinFills(
-          symbol: symbol,
-          apiKey: apiKey,
-          apiSecret: apiSecret,
-          apiPassphrase: apiPassphrase,
-          startAt: lookbackDate,
-          onProgress: handleProgress,
-        );
-      } else if (exchange.toLowerCase() == 'binance') {
-        fills = await ExchangeService.instance.fetchBinanceFills(
-          symbol: symbol,
-          apiKey: apiKey,
-          apiSecret: apiSecret,
-          startAt: lookbackDate,
-          onProgress: handleProgress,
-        );
-      } else if (exchange.toLowerCase() == 'bingx') {
-        fills = await ExchangeService.instance.fetchBingXFills(
-          symbol: symbol,
-          apiKey: apiKey,
-          apiSecret: apiSecret,
-          startAt: lookbackDate,
-          onProgress: handleProgress,
-        );
-      } else {
-        throw Exception('Exchange $exchange no soportado.');
+      // 2. Si la nube no devolvió datos nuevos o falló, fallback local directo al exchange
+      if (fills.isEmpty) {
+        void handleProgress(double progress, String statusMessage, int foundCount) {
+          if (updateProviderState) {
+            _importProgress = progress;
+            _importStatusMessage = statusMessage;
+            _importFoundCount = foundCount;
+            notifyListeners();
+          }
+        }
+
+        if (exchange.toLowerCase() == 'kucoin') {
+          fills = await ExchangeService.instance.fetchKucoinFills(
+            symbol: symbol,
+            apiKey: apiKey,
+            apiSecret: apiSecret,
+            apiPassphrase: apiPassphrase,
+            startAt: lookbackDate,
+            onProgress: handleProgress,
+          );
+        } else if (exchange.toLowerCase() == 'binance') {
+          fills = await ExchangeService.instance.fetchBinanceFills(
+            symbol: symbol,
+            apiKey: apiKey,
+            apiSecret: apiSecret,
+            startAt: lookbackDate,
+            onProgress: handleProgress,
+          );
+        } else if (exchange.toLowerCase() == 'bingx') {
+          fills = await ExchangeService.instance.fetchBingXFills(
+            symbol: symbol,
+            apiKey: apiKey,
+            apiSecret: apiSecret,
+            startAt: lookbackDate,
+            onProgress: handleProgress,
+          );
+        } else {
+          throw Exception('Exchange $exchange no soportado.');
+        }
       }
 
       if (updateProviderState) {

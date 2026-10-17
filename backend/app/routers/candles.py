@@ -29,6 +29,45 @@ TIME_BUCKET_MAP = {
     "1w": "1 week",
 }
 
+@router.get("/tickers", response_model=List[Dict[str, Any]])
+async def get_live_tickers():
+    """
+    Devuelve el último precio, volumen y hora de la última vela para todas las monedas activas en seguimiento.
+    Ideal para alimentar la barra de favoritos en una sola llamada ultrarrápida.
+    """
+    pool = await get_db_pool()
+    query = """
+        SELECT DISTINCT ON (ts.exchange, ts.symbol)
+            ts.exchange,
+            ts.symbol,
+            mc.close AS last_price,
+            mc.open,
+            mc.high,
+            mc.low,
+            mc.volume,
+            mc.time AS last_time
+        FROM tracked_symbols ts
+        JOIN market_candles mc ON ts.exchange = mc.exchange AND ts.symbol = mc.symbol
+        WHERE ts.is_active = TRUE
+        ORDER BY ts.exchange, ts.symbol, mc.time DESC;
+    """
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(query)
+
+    return [
+        {
+            "exchange": r["exchange"],
+            "symbol": r["symbol"],
+            "last_price": r["last_price"],
+            "open": r["open"],
+            "high": r["high"],
+            "low": r["low"],
+            "volume": r["volume"],
+            "time": int(r["last_time"].timestamp()),
+        }
+        for r in rows
+    ]
+
 @router.get("", response_model=List[Dict[str, Any]])
 async def get_candles(
     exchange: str = Query(..., description="Nombre del exchange (binance, kucoin)"),

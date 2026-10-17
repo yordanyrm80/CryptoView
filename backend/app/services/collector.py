@@ -160,6 +160,8 @@ async def run_collector():
     pool = await init_db_pool()
     client = ExchangeClient()
 
+    backfill_cursor = 0
+
     try:
         while True:
             # 1. Cargar y actualizar claves cifradas de exchanges desde la base de datos
@@ -182,11 +184,13 @@ async def run_collector():
                 except Exception as e:
                     print(f"[Error Collector Forward] {exchange} {symbol}: {e}")
 
-            # 4. Tarea 2: Backfill Progresivo (hacia atrás) — Máximo 1 petición por ciclo de 20s
-            # para respetar al máximo los límites de tasa de KuCoin.
+            # 4. Tarea 2: Backfill Progresivo (hacia atrás) con Round-Robin rotativo
+            # Alterna secuencialmente entre todas las monedas pendientes para que todas avancen en paralelo hacia el pasado.
             pending_backfill = [(ex, sym) for ex, sym, done in active_symbols if not done]
             if pending_backfill:
-                ex_bf, sym_bf = pending_backfill[0]
+                backfill_cursor = backfill_cursor % len(pending_backfill)
+                ex_bf, sym_bf = pending_backfill[backfill_cursor]
+                backfill_cursor = (backfill_cursor + 1) % len(pending_backfill)
                 try:
                     await asyncio.sleep(2.5)  # Pausa extra antes del bloque histórico
                     await sync_symbol_backward(client, pool, ex_bf, sym_bf)
