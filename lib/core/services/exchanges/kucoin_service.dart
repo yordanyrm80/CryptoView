@@ -144,6 +144,89 @@ class KucoinService {
     return {};
   }
 
+  /// Fetch withdrawals from KuCoin
+  Future<List<Map<String, dynamic>>> fetchWithdrawals({
+    required String apiKey,
+    required String apiSecret,
+    required String apiPassphrase,
+    String? currency,
+    DateTime? startAt,
+    DateTime? endAt,
+  }) async {
+    final List<Map<String, dynamic>> allWithdrawals = [];
+    int currentPage = 1;
+    const pageSize = 50;
+
+    while (true) {
+      final timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+      String query = 'pageSize=$pageSize&currentPage=$currentPage';
+      if (currency != null && currency.isNotEmpty) {
+        query += '&currency=${currency.toUpperCase()}';
+      }
+      if (startAt != null) {
+        query += '&startAt=${startAt.toUtc().millisecondsSinceEpoch}';
+      }
+      if (endAt != null) {
+        query += '&endAt=${endAt.toUtc().millisecondsSinceEpoch}';
+      }
+
+      final requestPath = '/api/v1/withdrawals?$query';
+      final url = Uri.parse('https://api.kucoin.com$requestPath');
+
+      try {
+        final signature = _generateSignature(apiSecret, timestamp, 'GET', requestPath, '');
+        final encryptedPassphrase = _generatePassphrase(apiSecret, apiPassphrase);
+
+        final response = await http.get(
+          url,
+          headers: {
+            'KC-API-KEY': apiKey,
+            'KC-API-SIGN': signature,
+            'KC-API-TIMESTAMP': timestamp,
+            'KC-API-PASSPHRASE': encryptedPassphrase,
+            'KC-API-KEY-VERSION': '2',
+            'Content-Type': 'application/json',
+          },
+        );
+
+        if (response.statusCode == 200) {
+          final Map<String, dynamic> root = json.decode(response.body);
+          if (root['code'] == '200000') {
+            final data = root['data'];
+            final List<dynamic> items = data['items'] ?? [];
+            for (var item in items) {
+              if (item['status'] == 'SUCCESS') {
+                allWithdrawals.add({
+                  'currency': item['currency'].toString().toUpperCase(),
+                  'amount': double.tryParse(item['amount'].toString()) ?? 0.0,
+                  'fee': double.tryParse(item['fee'].toString()) ?? 0.0,
+                  'createdAt': item['createdAt'] as int,
+                  'txId': item['walletTxId']?.toString() ?? item['id']?.toString(),
+                  'address': item['address']?.toString(),
+                  'remark': item['remark']?.toString(),
+                });
+              }
+            }
+
+            final totalPage = data['totalPage'] as int? ?? 1;
+            if (currentPage >= totalPage || items.isEmpty) {
+              break;
+            }
+            currentPage++;
+          } else {
+            break;
+          }
+        } else {
+          break;
+        }
+      } catch (e) {
+        break;
+      }
+    }
+
+    return allWithdrawals;
+  }
+
   Future<List<Map<String, dynamic>>> fetchFills({
     required String symbol,
     required String apiKey,

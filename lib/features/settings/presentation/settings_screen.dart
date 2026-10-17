@@ -1,8 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../providers/settings_provider.dart';
 import '../../exchanges/presentation/exchanges_screen.dart';
+import '../../tracker/providers/tracker_provider.dart';
+import '../../watchlist/providers/watchlist_provider.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -231,11 +234,445 @@ class SettingsScreen extends StatelessWidget {
                     ],
                   ),
                 ),
+                const SizedBox(height: 20),
+
+                // 6. Database Backup & Restore Section
+                _buildBackupSection(context, settingsProvider),
                 const SizedBox(height: 24),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildBackupSection(BuildContext context, SettingsProvider settingsProvider) {
+    final backups = settingsProvider.backupFiles;
+    final isBusy = settingsProvider.isBackupBusy;
+    final daysSince = settingsProvider.daysSinceLastBackup;
+    final isOverdue = settingsProvider.isBackupOverdue;
+
+    String statusLabel;
+    if (daysSince == null) {
+      statusLabel = 'Aún no has descargado ninguna salva mensual';
+    } else if (daysSince == 0) {
+      statusLabel = 'Última salva realizada: Hoy';
+    } else if (daysSince == 1) {
+      statusLabel = 'Última salva realizada: Hace 1 día';
+    } else {
+      statusLabel = 'Última salva realizada: Hace $daysSince días';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isOverdue ? Colors.amber.withValues(alpha: 0.7) : AppColors.border,
+          width: isOverdue ? 1.5 : 1.0,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.blueAccent.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.storage_rounded, color: Colors.blueAccent, size: 24),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Copias de Seguridad (Local & Servidor Cloud)',
+                      style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Guarda y restaura salvas manuales de tu base de datos local y del servidor de Oracle Cloud',
+                      style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Banner de estado / recordatorio mensual (30 días)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: isOverdue
+                  ? Colors.amber.withValues(alpha: 0.12)
+                  : AppColors.bull.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isOverdue
+                    ? Colors.amber.withValues(alpha: 0.5)
+                    : AppColors.bull.withValues(alpha: 0.4),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  isOverdue ? Icons.warning_amber_rounded : Icons.verified_user_rounded,
+                  color: isOverdue ? Colors.amber : AppColors.bull,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    isOverdue
+                        ? '$statusLabel · Recomendado hacer una salva mensual.'
+                        : '$statusLabel · Respaldo al día (ciclo de 30 días).',
+                    style: TextStyle(
+                      color: isOverdue ? Colors.amber : AppColors.bull,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: isBusy
+                    ? null
+                    : () async {
+                        final path = await settingsProvider.createBackup();
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              backgroundColor: path != null ? AppColors.bull : AppColors.bear,
+                              content: Text(
+                                path != null
+                                    ? 'Copia de seguridad local (.db) guardada con éxito.'
+                                    : (settingsProvider.backupMessage ?? 'Error al crear salva.'),
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                icon: isBusy
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.save_rounded, size: 16),
+                label: Text(
+                  isBusy ? 'Procesando...' : 'Crear Salva Local (.db)',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueAccent,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: isBusy
+                    ? null
+                    : () async {
+                        final path = await settingsProvider.downloadCloudBackup(includeCandles: false);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              backgroundColor: path != null ? AppColors.bull : AppColors.bear,
+                              content: Text(
+                                path != null
+                                    ? 'Respaldo del Servidor Cloud (.json.gz) descargado a tu PC.'
+                                    : (settingsProvider.backupMessage ?? 'Error descargando respaldo cloud.'),
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                icon: const Icon(Icons.cloud_download_rounded, size: 16),
+                label: const Text(
+                  'Descargar Salva Servidor Cloud',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+              ),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.textPrimary,
+                  side: const BorderSide(color: AppColors.border),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: () => settingsProvider.openBackupsFolder(),
+                icon: const Icon(Icons.folder_open_outlined, size: 16),
+                label: const Text('Abrir Carpeta', style: TextStyle(fontSize: 12)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          const Divider(color: AppColors.border, height: 1),
+          const SizedBox(height: 12),
+          Text(
+            'Salvas Disponibles (${backups.length}):',
+            style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13),
+          ),
+          const SizedBox(height: 8),
+          if (backups.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.border.withValues(alpha: 0.5)),
+              ),
+              child: const Text(
+                'No hay copias de seguridad guardadas en la carpeta de respaldos. Pulsa "Crear Salva" para generar una.',
+                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+              ),
+            )
+          else
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: backups.length,
+              itemBuilder: (ctx, index) {
+                final file = backups[index];
+                final filename = file.path.split(Platform.pathSeparator).last;
+                final isCloud = filename.endsWith('.json.gz') || filename.endsWith('.json');
+                DateTime? modDate;
+                int sizeBytes = 0;
+                try {
+                  modDate = file.lastModifiedSync();
+                  sizeBytes = file.lengthSync();
+                } catch (_) {}
+
+                final sizeStr = sizeBytes < 1024 * 1024
+                    ? '${(sizeBytes / 1024).toStringAsFixed(1)} KB'
+                    : '${(sizeBytes / (1024 * 1024)).toStringAsFixed(2)} MB';
+
+                final dateFormatted = modDate != null
+                    ? '${modDate.day.toString().padLeft(2, '0')}/${modDate.month.toString().padLeft(2, '0')}/${modDate.year} ${modDate.hour.toString().padLeft(2, '0')}:${modDate.minute.toString().padLeft(2, '0')}:${modDate.second.toString().padLeft(2, '0')}'
+                    : '';
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isCloud ? Icons.cloud_done_outlined : Icons.archive_outlined,
+                        color: isCloud ? Colors.cyanAccent : Colors.blueAccent,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              filename,
+                              style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 12),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '$dateFormatted · $sizeStr',
+                              style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange.withValues(alpha: 0.15),
+                          foregroundColor: Colors.orange,
+                          side: const BorderSide(color: Colors.orange, width: 0.8),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                          minimumSize: const Size(60, 30),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        ),
+                        onPressed: isBusy ? null : () => _confirmRestore(context, file, filename, dateFormatted, settingsProvider),
+                        icon: const Icon(Icons.restore, size: 13),
+                        label: const Text('Restaurar', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      ),
+                      const SizedBox(width: 6),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, color: AppColors.textMuted, size: 18),
+                        tooltip: 'Eliminar salva',
+                        onPressed: isBusy ? null : () => _confirmDeleteBackup(context, file, filename, settingsProvider),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmRestore(
+    BuildContext context,
+    File file,
+    String filename,
+    String dateStr,
+    SettingsProvider settingsProvider,
+  ) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 22),
+            SizedBox(width: 8),
+            Text('Restaurar Salva', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '¿Deseas restaurar la base de datos a este punto de respaldo?',
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.card,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Archivo: $filename', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                  const SizedBox(height: 4),
+                  Text('Fecha de salva: $dateStr', style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Nota de seguridad: Antes de restaurar se creará automáticamente una copia preventiva del estado actual.',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar', style: TextStyle(color: AppColors.textMuted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.black,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              final success = await settingsProvider.restoreBackup(file.path);
+              if (context.mounted) {
+                if (success) {
+                  await Provider.of<TrackerProvider>(context, listen: false).loadData();
+                  await Provider.of<WatchlistProvider>(context, listen: false).reloadWatchlistState();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      backgroundColor: AppColors.bull,
+                      content: Text('¡Base de datos restaurada con éxito! Todos los datos fueron recargados.'),
+                    ),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      backgroundColor: AppColors.bear,
+                      content: Text(settingsProvider.backupMessage ?? 'Error al restaurar.'),
+                    ),
+                  );
+                }
+              }
+            },
+            child: const Text('Sí, Restaurar', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteBackup(
+    BuildContext context,
+    File file,
+    String filename,
+    SettingsProvider settingsProvider,
+  ) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        title: const Text('Eliminar Salva', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
+        content: Text('¿Deseas eliminar permanentemente el archivo $filename?', style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar', style: TextStyle(color: AppColors.textMuted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.bear,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await settingsProvider.deleteBackup(file.path);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    backgroundColor: AppColors.surface,
+                    content: Text('Archivo de respaldo eliminado.'),
+                  ),
+                );
+              }
+            },
+            child: const Text('Eliminar'),
+          ),
+        ],
       ),
     );
   }

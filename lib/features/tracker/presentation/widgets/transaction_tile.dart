@@ -111,6 +111,138 @@ class TransactionTile extends StatelessWidget {
     );
   }
 
+  void _confirmMarkAsExpense(BuildContext context, double remaining, String baseAsset, double remainingQuoteValue, String quoteAsset) {
+    final amountController = TextEditingController(text: _formatAmount(remaining));
+    final noteController = TextEditingController();
+    String selectedCategory = 'Compra Amazon';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: AppColors.border),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.shopping_bag_outlined, color: Colors.orange, size: 20),
+              SizedBox(width: 8),
+              Text('Marcar Compra como Gasto', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Esta compra saldrá de "Compras vivas" y ya no se mostrará como compra abierta en el gráfico.',
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                Text('Cantidad ($baseAsset)', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: amountController,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
+                  decoration: InputDecoration(
+                    suffixText: baseAsset,
+                    suffixStyle: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
+                    filled: true,
+                    fillColor: AppColors.card,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.border)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text('Categoría del Gasto', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                const SizedBox(height: 4),
+                DropdownButtonFormField<String>(
+                  value: selectedCategory,
+                  dropdownColor: AppColors.surface,
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: AppColors.card,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.border)),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'Compra Amazon', child: Text('Compra Amazon')),
+                    DropdownMenuItem(value: 'Walmart / Cashi', child: Text('Walmart / Cashi')),
+                    DropdownMenuItem(value: 'Gasto Personal', child: Text('Gasto Personal')),
+                    DropdownMenuItem(value: 'Store Credit', child: Text('Store Credit')),
+                    DropdownMenuItem(value: 'Recarga Móvil', child: Text('Recarga Móvil')),
+                    DropdownMenuItem(value: 'Entretenimiento', child: Text('Entretenimiento')),
+                    DropdownMenuItem(value: 'Otro Gasto', child: Text('Otro Gasto')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) setDialogState(() => selectedCategory = val);
+                  },
+                ),
+                const SizedBox(height: 12),
+                const Text('Nota o Descripción', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                const SizedBox(height: 4),
+                TextField(
+                  controller: noteController,
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                  decoration: InputDecoration(
+                    hintText: 'Ej. Amazon 1000 MXN, Bitrefill, etc.',
+                    hintStyle: const TextStyle(color: AppColors.textMuted),
+                    filled: true,
+                    fillColor: AppColors.card,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.border)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar', style: TextStyle(color: AppColors.textMuted)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () async {
+                final qty = double.tryParse(amountController.text.trim()) ?? 0.0;
+                if (qty <= 0 || qty > remaining + 0.000001) return;
+
+                Navigator.pop(ctx);
+                final success = await provider.convertBuyToExpense(
+                  buy: tx,
+                  amount: qty,
+                  description: noteController.text.trim().isNotEmpty
+                      ? noteController.text.trim()
+                      : '$selectedCategory: ${_formatAmount(qty)} $baseAsset',
+                  category: selectedCategory,
+                );
+
+                if (success && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      backgroundColor: AppColors.surface,
+                      content: Text(
+                        'Compra de ${_formatAmount(qty)} $baseAsset marcada como gasto ($selectedCategory) y retirada de compras vivas.',
+                        style: const TextStyle(color: AppColors.textPrimary),
+                      ),
+                    ),
+                  );
+                }
+              },
+              child: const Text('Confirmar Gasto', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isBuy = tx.type == 'buy';
@@ -441,6 +573,21 @@ class TransactionTile extends StatelessWidget {
                           onPressed: () => _confirmDismissDust(context, remaining, baseAsset, remainingQuoteValue, quoteAsset),
                           icon: const Icon(Icons.cleaning_services, size: 13),
                           label: const Text('Polvillo', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      if (isBuy && remaining > 0) ...[
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.orange,
+                            side: BorderSide(color: Colors.orange.withValues(alpha: 0.7)),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+                            minimumSize: const Size(64, 32),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: () => _confirmMarkAsExpense(context, remaining, baseAsset, remainingQuoteValue, quoteAsset),
+                          icon: const Icon(Icons.shopping_bag_outlined, size: 13, color: Colors.orange),
+                          label: const Text('Gasto', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                         ),
                         const SizedBox(width: 8),
                       ],

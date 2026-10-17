@@ -115,8 +115,64 @@ lib/
 
 ## 5. Comandos Útiles de Consola (PowerShell / CMD)
 
+* **Compilar ejecutable Windows Release**: `flutter build windows` (Salida: `build\windows\x64\runner\Release\cryptoview.exe` — **Nota**: el asistente nunca debe ejecutar `cryptoview.exe` directamente).
 * **Ejecutar en Windows Desktop**: `flutter run -d windows`
 * **Lanzar Emulador Android**: `flutter emulators --launch invera_phone`
 * **Ejecutar en Emulador Android**: `flutter run -d invera_phone`
 * **Verificar dispositivos conectados**: `flutter devices`
 * **Limpiar y regenerar paquetes**: `flutter clean && flutter pub get`
+
+---
+
+## 6. Infraestructura Backend 24/7 y Despliegue en Producción (Oracle Cloud)
+
+### 📍 Rutas y Entorno del Servidor
+* **Proveedor Cloud y Región**: Oracle Cloud Infrastructure (OCI) — `us-phoenix-1` (Always Free ARM64, 1 OCPU, 6 GB RAM)
+* **IP Pública y Host SSH**: `ubuntu@129.146.110.196` (`cryptoview-server`)
+* **Llave Privada SSH en PC**: `C:\Users\yordany\.ssh\ssh-key-cryptoview-server.key`
+* **URL Base de la API**: `http://129.146.110.196:8000` (Swagger Docs: `http://129.146.110.196:8000/docs`)
+* **Ruta Exacta de Despliegue en el Servidor**: `/home/ubuntu/backend` (`~/backend`)
+  * Variables de entorno (producción): `/home/ubuntu/backend/.env`
+  * Orquestación Docker: `/home/ubuntu/backend/docker-compose.yml`
+  * Dockerfile: `/home/ubuntu/backend/Dockerfile`
+  * Inicialización SQL y Vistas Continuas: `/home/ubuntu/backend/sql/01_init.sql`
+  * Aplicación FastAPI y Worker: `/home/ubuntu/backend/app/`
+* **Ruta Exacta Local en PC (Windows)**: `d:\Proyectos\Mios\CryptoView\backend`
+
+### 🐳 Contenedores y Servicios Activos en el Servidor
+1. **`cryptoview-timescaledb`** (`timescale/timescaledb-ha:pg17`):
+   * Puerto interno: `127.0.0.1:5432->5432/tcp`
+   * Volumen persistente de Docker: `pgdata` (`/home/postgres/pgdata/data`)
+   * Modelo de datos: Ingestión pura de velas de **1 minuto (`1m`)** en Hypertable `market_candles` (en UTC) y cálculo automático de temporalidades superiores (`candles_5m`, `candles_1h`, `candles_1d` y `time_bucket` al vuelo).
+   * Seguridad de claves: Tabla `api_keys` con cifrado simétrico AES-256 / Fernet derivado por SHA-256 desde `ENCRYPTION_KEY`.
+2. **`cryptoview-api`** (`backend-api` - FastAPI / Uvicorn):
+   * Puerto público expuesto: `0.0.0.0:8000->8000/tcp` (abierto en OCI Security List + Ubuntu `iptables`)
+   * Autenticación mediante cabecera HTTP `X-API-Key`.
+3. **`cryptoview-worker`** (`backend-worker`):
+   * Demonio recolector 24/7 (`python -m app.services.collector`) que sincroniza dinámicamente los pares activos en `tracked_symbols` y descifra credenciales desde `api_keys` en caliente sin reiniciar contenedores.
+
+### 🔑 Identificadores OCI (OCIDs de Red e Instancia)
+* **Tenancy OCID**: `ocid1.tenancy.oc1..aaaaaaaa7k7vtr66pw3uibegppfnvzxja3jk64fzzuku4vpiuwxkzxpx37ea`
+* **Instance OCID (`cryptoview-server`)**: `ocid1.instance.oc1.phx.anyhqljrwg5llficuqkptjpizvcb3dtt7rp5f3tegxq6nme3nbqcvgdnkmxq`
+* **VCN OCID**: `ocid1.vcn.oc1.phx.amaaaaaawg5llfia45nbpgtj64tswyacnv74b3mmyhpf22zsx4i5jcwa2dma`
+* **Subnet OCID**: `ocid1.subnet.oc1.phx.aaaaaaaaqiciizmn7bmvf2wooybnll5gyeqttgt3ae7zpwpqxchvl7banocq`
+* **Security List OCID**: `ocid1.securitylist.oc1.phx.aaaaaaaamlbc7s3qedul2h2qj77tuzzud3qytfrm44ffpxyzhuvw7psq5cja`
+
+### ⚡ Comandos Directos de Despliegue y Mantenimiento
+* **Subir cambios desde Windows al servidor (sin anidar carpetas)**:
+  ```powershell
+  scp -r d:\Proyectos\Mios\CryptoView\backend\* ubuntu@<IP_SERVIDOR>:/home/ubuntu/backend/
+  ```
+* **Reconstruir y levantar servicios en el servidor**:
+  ```bash
+  cd /home/ubuntu/backend && docker compose up -d --build
+  ```
+* **Reiniciar base de datos desde cero (aplicar nuevo `01_init.sql`)**:
+  ```bash
+  cd /home/ubuntu/backend && docker compose down -v && docker compose up -d --build
+  ```
+* **Ver logs en vivo del colector**:
+  ```bash
+  docker logs -f cryptoview-worker
+  ```
+

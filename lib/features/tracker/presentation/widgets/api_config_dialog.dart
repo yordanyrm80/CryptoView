@@ -81,7 +81,7 @@ class _ApiConfigDialogState extends State<ApiConfigDialog> {
                 labelStyle: TextStyle(color: AppColors.textSecondary),
                 enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.border)),
               ),
-              items: const ['Binance', 'KuCoin', 'BingX'].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
+              items: const ['Binance', 'KuCoin', 'BingX', 'Bitrefill'].map((val) => DropdownMenuItem(value: val, child: Text(val))).toList(),
               onChanged: (val) {
                 if (val != null) {
                   setState(() => _selectedExchange = val);
@@ -90,31 +90,35 @@ class _ApiConfigDialogState extends State<ApiConfigDialog> {
               },
             ),
             const SizedBox(height: 12),
-            const Text(
-              'Ingresa tus credenciales de solo lectura (permiso "General") para poder importar tu historial.',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            Text(
+              _selectedExchange == 'Bitrefill'
+                  ? 'Ingresa tu clave de API de Bitrefill para sincronizar automáticamente tus compras y gastos.'
+                  : 'Ingresa tus credenciales de solo lectura (permiso "General") para poder importar tu historial.',
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _keyController,
               style: const TextStyle(color: AppColors.textPrimary),
-              decoration: const InputDecoration(
-                labelText: 'API Key',
-                labelStyle: TextStyle(color: AppColors.textSecondary),
-                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.border)),
+              decoration: InputDecoration(
+                labelText: _selectedExchange == 'Bitrefill' ? 'Bitrefill API Key (Bearer Token)' : 'API Key',
+                labelStyle: const TextStyle(color: AppColors.textSecondary),
+                enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: AppColors.border)),
               ),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _secretController,
-              obscureText: true,
-              style: const TextStyle(color: AppColors.textPrimary),
-              decoration: const InputDecoration(
-                labelText: 'API Secret',
-                labelStyle: TextStyle(color: AppColors.textSecondary),
-                enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.border)),
+            if (_selectedExchange != 'Bitrefill') ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _secretController,
+                obscureText: true,
+                style: const TextStyle(color: AppColors.textPrimary),
+                decoration: const InputDecoration(
+                  labelText: 'API Secret',
+                  labelStyle: TextStyle(color: AppColors.textSecondary),
+                  enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: AppColors.border)),
+                ),
               ),
-            ),
+            ],
             if (isKucoin) ...[
               const SizedBox(height: 12),
               TextField(

@@ -1,4 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:path/path.dart' show join;
 import '../../../core/database/database_helper.dart';
 
 class SettingsProvider with ChangeNotifier {
@@ -6,10 +9,14 @@ class SettingsProvider with ChangeNotifier {
   static const String defaultBuyLineColor = '#00E676'; // Neon Green
   static const String defaultSellLineColor = '#FF5252'; // Neon Red
   static const String defaultCurrentPriceColor = '#00E5FF'; // Electric Cyan
+  static const String defaultCloudApiUrl = 'http://129.146.110.196:8000';
+  static const String defaultCloudApiToken = 'aa0d07ca7079caf19492d0fc4a762c593b3e02e205c669ae60de5cbbd66979c2';
 
   String _buyLineColorHex = defaultBuyLineColor;
   String _sellLineColorHex = defaultSellLineColor;
   String _currentPriceColorHex = defaultCurrentPriceColor;
+  String _cloudApiUrl = defaultCloudApiUrl;
+  String _cloudApiToken = defaultCloudApiToken;
 
   bool _showBuyLines = true;
   bool _showBuyLabels = true;
@@ -26,9 +33,36 @@ class SettingsProvider with ChangeNotifier {
   double _trackerWidth = 380.0;
 
   bool _isLoaded = false;
+  List<File> _backupFiles = [];
+  bool _isBackupBusy = false;
+  String? _backupMessage;
 
   SettingsProvider() {
     loadSettings();
+  }
+
+  List<File> get backupFiles => _backupFiles;
+  bool get isBackupBusy => _isBackupBusy;
+  String? get backupMessage => _backupMessage;
+
+  DateTime? get lastBackupDate {
+    if (_backupFiles.isEmpty) return null;
+    try {
+      return _backupFiles.first.lastModifiedSync();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  int? get daysSinceLastBackup {
+    final last = lastBackupDate;
+    if (last == null) return null;
+    return DateTime.now().difference(last).inDays;
+  }
+
+  bool get isBackupOverdue {
+    final days = daysSinceLastBackup;
+    return days == null || days >= 30;
   }
 
   String get buyLineColorHex => _buyLineColorHex;
@@ -49,8 +83,14 @@ class SettingsProvider with ChangeNotifier {
   bool get areAllLabelsVisible =>
       _showBuyLabels && _showSellLabels && _showOpenOrderLabels && _showDrawingLabels && _showCurrentPriceLabel;
 
+  bool get hasAnyLabelVisible =>
+      _showBuyLabels || _showSellLabels || _showOpenOrderLabels || _showDrawingLabels || _showCurrentPriceLabel;
+
   bool get areAllLinesVisible =>
       _showBuyLines && _showSellLines && _showOpenOrders && _showDrawings && _showCurrentPriceLine;
+
+  bool get hasAnyLineVisible =>
+      _showBuyLines || _showSellLines || _showOpenOrders || _showDrawings || _showCurrentPriceLine;
 
   double get watchlistWidth => _watchlistWidth;
   double get trackerWidth => _trackerWidth;
@@ -99,10 +139,140 @@ class SettingsProvider with ChangeNotifier {
       final tWidthStr = await db.getGeneralSetting('tracker_width', defaultValue: '380.0');
       _trackerWidth = double.tryParse(tWidthStr ?? '380.0') ?? 380.0;
 
+      await loadBackups();
+
       _isLoaded = true;
       notifyListeners();
     } catch (e) {
       debugPrint('Error loading settings: $e');
+    }
+  }
+
+  Future<void> loadBackups() async {
+    try {
+      _backupFiles = await DatabaseHelper.instance.getBackupFiles();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error loading backups: $e');
+    }
+  }
+
+  Future<String?> createBackup() async {
+    _isBackupBusy = true;
+    _backupMessage = null;
+    notifyListeners();
+
+    try {
+      final path = await DatabaseHelper.instance.createBackup();
+      await loadBackups();
+      _isBackupBusy = false;
+      _backupMessage = 'Copia de seguridad local (.db) creada correctamente.';
+      notifyListeners();
+      return path;
+    } catch (e) {
+      _isBackupBusy = false;
+      _backupMessage = 'Error creando salva local: $e';
+      notifyListeners();
+      return null;
+    }
+  }
+
+  Future<String?> downloadCloudBackup({bool includeCandles = false}) async {
+    _isBackupBusy = true;
+    _backupMessage = null;
+    notifyListeners();
+
+    try {
+      final uri = Uri.parse(
+        '$_cloudApiUrl/api/v1/backup/export?include_candles=$includeCandles&compressed=true',
+      );
+      final response = await http.get(
+        uri,
+        headers: {'X-API-Key': _cloudApiToken},
+      ).timeout(const Duration(seconds: 60));
+
+      if (response.statusCode != 200) {
+        throw Exception('HTTP ${response.statusCode}: ${response.body}');
+      }
+
+      final backupDirPath = await DatabaseHelper.instance.getBackupsDirectoryPath();
+      final now = DateTime.now().toUtc();
+      final pad = (int n) => n.toString().padLeft(2, '0');
+      final suffix = includeCandles ? 'full' : 'privado';
+      final filename =
+          'cryptoview_cloud_${suffix}_${now.year}-${pad(now.month)}-${pad(now.day)}_${pad(now.hour)}-${pad(now.minute)}-${pad(now.second)}.json.gz';
+      final file = File(join(backupDirPath, filename));
+      await file.writeAsBytes(response.bodyBytes, flush: true);
+
+      await loadBackups();
+      _isBackupBusy = false;
+      _backupMessage = 'Respaldo del Servidor Cloud descargado con éxito.';
+      notifyListeners();
+      return file.path;
+    } catch (e) {
+      _isBackupBusy = false;
+      _backupMessage = 'Error descargando salva del servidor: $e';
+      notifyListeners();
+      return null;
+    }
+  }
+
+  Future<bool> restoreBackup(String path) async {
+    _isBackupBusy = true;
+    _backupMessage = null;
+    notifyListeners();
+
+    try {
+      if (path.endsWith('.json.gz') || path.endsWith('.json')) {
+        final bytes = await File(path).readAsBytes();
+        final uri = Uri.parse('$_cloudApiUrl/api/v1/backup/restore');
+        final response = await http.post(
+          uri,
+          headers: {
+            'X-API-Key': _cloudApiToken,
+            'Content-Type': 'application/octet-stream',
+          },
+          body: bytes,
+        ).timeout(const Duration(seconds: 90));
+
+        if (response.statusCode != 200) {
+          throw Exception('HTTP ${response.statusCode}: ${response.body}');
+        }
+        _isBackupBusy = false;
+        _backupMessage = 'Base de datos del Servidor Cloud restaurada correctamente.';
+        notifyListeners();
+        return true;
+      }
+
+      await DatabaseHelper.instance.restoreBackup(path);
+      await loadSettings();
+      await loadBackups();
+      _isBackupBusy = false;
+      _backupMessage = 'Base de datos local restaurada correctamente.';
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _isBackupBusy = false;
+      _backupMessage = 'Error restaurando salva: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<void> deleteBackup(String path) async {
+    try {
+      await DatabaseHelper.instance.deleteBackup(path);
+      await loadBackups();
+    } catch (e) {
+      debugPrint('Error deleting backup: $e');
+    }
+  }
+
+  Future<void> openBackupsFolder() async {
+    try {
+      await DatabaseHelper.instance.openBackupsFolder();
+    } catch (e) {
+      debugPrint('Error opening backups folder: $e');
     }
   }
 

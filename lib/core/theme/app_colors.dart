@@ -25,7 +25,7 @@ class AppColors {
   static const Color buyOrder = Color(0xFF29B6F6);     // Light Blue for buy order markers
 
   // Typography
-  static const Color textPrimary = Colors.white;
+  static const Color textPrimary = Color(0xFFFFFFFF);
   static const Color textSecondary = Color(0xFF90A4AE);
   static const Color textMuted = Color(0xFF546E7A);
 }

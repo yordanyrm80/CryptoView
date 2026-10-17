@@ -7,7 +7,7 @@ class BinanceService {
   BinanceService._init();
 
   /// Fetch K-line (candlestick) history from Binance
-  Future<List<Map<String, dynamic>>> fetchKlines(String symbol, String interval, {int limit = 150}) async {
+  Future<List<Map<String, dynamic>>> fetchKlines(String symbol, String interval, {int limit = 500}) async {
     final formattedSymbol = symbol.replaceAll('-', '').replaceAll('/', '').toUpperCase();
     final url = Uri.parse('https://api.binance.com/api/v3/klines?symbol=$formattedSymbol&interval=$interval&limit=$limit');
 

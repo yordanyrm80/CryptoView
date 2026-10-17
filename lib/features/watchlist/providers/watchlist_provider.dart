@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../../core/database/database_helper.dart';
+import '../../../core/services/cloud_api_service.dart';
 import '../../../core/services/exchanges/exchange_service.dart';
 
 class WatchlistProvider extends ChangeNotifier {
@@ -79,15 +80,22 @@ class WatchlistProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> reloadWatchlistState() async {
+    await _loadWatchlistState();
+    notifyListeners();
+  }
+
   bool isFavorite(String symbol) => _favoriteSymbols.contains(symbol);
 
   Future<void> toggleFavorite(String symbol) async {
     if (_favoriteSymbols.contains(symbol)) {
       _favoriteSymbols.remove(symbol);
       await DatabaseHelper.instance.removeFavorite(symbol);
+      await CloudApiService.instance.removeTrackedSymbol(_currentExchange, symbol);
     } else {
       _favoriteSymbols.add(symbol);
       await DatabaseHelper.instance.addFavorite(symbol);
+      await CloudApiService.instance.addTrackedSymbol(_currentExchange, symbol);
     }
     notifyListeners();
   }

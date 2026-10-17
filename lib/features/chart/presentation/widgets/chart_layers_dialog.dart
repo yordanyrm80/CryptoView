@@ -122,171 +122,176 @@ class ChartLayersDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final areAllLabelsOn = settingsProvider.areAllLabelsVisible;
-    final areAllLinesOn = settingsProvider.areAllLinesVisible;
+    return ListenableBuilder(
+      listenable: settingsProvider,
+      builder: (context, _) {
+        final hasAnyLabelsOn = settingsProvider.hasAnyLabelVisible;
+        final hasAnyLinesOn = settingsProvider.hasAnyLineVisible;
 
-    return AlertDialog(
-      backgroundColor: AppColors.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: AppColors.border),
-      ),
-      titlePadding: const EdgeInsets.fromLTRB(18, 16, 18, 8),
-      contentPadding: const EdgeInsets.fromLTRB(18, 8, 18, 16),
-      title: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Row(
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: AppColors.border),
+          ),
+          titlePadding: const EdgeInsets.fromLTRB(18, 16, 18, 8),
+          contentPadding: const EdgeInsets.fromLTRB(18, 8, 18, 16),
+          title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(Icons.layers_outlined, color: AppColors.primary, size: 22),
-              SizedBox(width: 8),
-              Text(
-                'Capas y Visibilidad',
-                style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
+              const Row(
+                children: [
+                  Icon(Icons.layers_outlined, color: AppColors.primary, size: 22),
+                  SizedBox(width: 8),
+                  Text(
+                    'Capas y Visibilidad',
+                    style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                ],
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, color: AppColors.textMuted, size: 20),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: () => Navigator.pop(context),
               ),
             ],
           ),
-          IconButton(
-            icon: const Icon(Icons.close, color: AppColors.textMuted, size: 20),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ],
-      ),
-      content: SizedBox(
-        width: 480,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Master Action Buttons Bar
-              Container(
-                margin: const EdgeInsets.only(bottom: 14),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppColors.card,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // Master Labels Toggle
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: areAllLabelsOn ? AppColors.primary : AppColors.textMuted,
-                        side: BorderSide(color: areAllLabelsOn ? AppColors.primary : AppColors.border),
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                      onPressed: () => settingsProvider.toggleAllLabels(!areAllLabelsOn),
-                      icon: Icon(areAllLabelsOn ? Icons.label : Icons.label_off_outlined, size: 14),
-                      label: Text(
-                        areAllLabelsOn ? 'Ocultar Etiquetas' : 'Mostrar Etiquetas',
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                      ),
+          content: SizedBox(
+            width: 480,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Master Action Buttons Bar
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 14),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.card,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: AppColors.border),
                     ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        // Master Labels Toggle
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: hasAnyLabelsOn ? AppColors.primary : AppColors.textMuted,
+                            side: BorderSide(color: hasAnyLabelsOn ? AppColors.primary : AppColors.border),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: () => settingsProvider.toggleAllLabels(!hasAnyLabelsOn),
+                          icon: Icon(hasAnyLabelsOn ? Icons.label : Icons.label_off_outlined, size: 14),
+                          label: Text(
+                            hasAnyLabelsOn ? 'Ocultar Etiquetas' : 'Mostrar Etiquetas',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ),
 
-                    // Master Lines Toggle
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: areAllLinesOn ? AppColors.primary : AppColors.textMuted,
-                        side: BorderSide(color: areAllLinesOn ? AppColors.primary : AppColors.border),
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                      onPressed: () => settingsProvider.toggleAllLines(!areAllLinesOn),
-                      icon: Icon(areAllLinesOn ? Icons.visibility : Icons.visibility_off, size: 14),
-                      label: Text(
-                        areAllLinesOn ? 'Ocultar Líneas' : 'Mostrar Líneas',
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                      ),
+                        // Master Lines Toggle
+                        OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: hasAnyLinesOn ? AppColors.primary : AppColors.textMuted,
+                            side: BorderSide(color: hasAnyLinesOn ? AppColors.primary : AppColors.border),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: () => settingsProvider.toggleAllLines(!hasAnyLinesOn),
+                          icon: Icon(hasAnyLinesOn ? Icons.visibility : Icons.visibility_off, size: 14),
+                          label: Text(
+                            hasAnyLinesOn ? 'Ocultar Líneas' : 'Mostrar Líneas',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
+                  ),
 
-              // 1. Mis Compras Abiertas
-              _buildCategoryCard(
-                context: context,
-                icon: Icons.shopping_bag_outlined,
-                title: 'Compras Abiertas (Diario)',
-                subtitle: 'Líneas verdes con precios de compra registrados',
-                color: settingsProvider.buyLineColor,
-                lineVisible: settingsProvider.showBuyLines,
-                onLineToggle: (val) => settingsProvider.setShowBuyLines(val),
-                labelVisible: settingsProvider.showBuyLabels,
-                onLabelToggle: (val) => settingsProvider.setShowBuyLabels(val),
-                labelText: 'Mostrar texto (Precio, Tokens y % PnL)',
-              ),
+                  // 1. Mis Compras Abiertas
+                  _buildCategoryCard(
+                    context: context,
+                    icon: Icons.shopping_bag_outlined,
+                    title: 'Compras Abiertas (Diario)',
+                    subtitle: 'Líneas verdes con precios de compra registrados',
+                    color: settingsProvider.buyLineColor,
+                    lineVisible: settingsProvider.showBuyLines,
+                    onLineToggle: (val) => settingsProvider.setShowBuyLines(val),
+                    labelVisible: settingsProvider.showBuyLabels,
+                    onLabelToggle: (val) => settingsProvider.setShowBuyLabels(val),
+                    labelText: 'Mostrar texto (Precio, Tokens y % PnL)',
+                  ),
 
-              // 2. Mis Ventas Abiertas
-              _buildCategoryCard(
-                context: context,
-                icon: Icons.sell_outlined,
-                title: 'Ventas Abiertas (Diario)',
-                subtitle: 'Líneas rojas de órdenes de venta registradas',
-                color: settingsProvider.sellLineColor,
-                lineVisible: settingsProvider.showSellLines,
-                onLineToggle: (val) => settingsProvider.setShowSellLines(val),
-                labelVisible: settingsProvider.showSellLabels,
-                onLabelToggle: (val) => settingsProvider.setShowSellLabels(val),
-                labelText: 'Mostrar texto (Precio y Tokens de venta)',
-              ),
+                  // 2. Mis Ventas Abiertas
+                  _buildCategoryCard(
+                    context: context,
+                    icon: Icons.sell_outlined,
+                    title: 'Ventas Abiertas (Diario)',
+                    subtitle: 'Líneas rojas de órdenes de venta registradas',
+                    color: settingsProvider.sellLineColor,
+                    lineVisible: settingsProvider.showSellLines,
+                    onLineToggle: (val) => settingsProvider.setShowSellLines(val),
+                    labelVisible: settingsProvider.showSellLabels,
+                    onLabelToggle: (val) => settingsProvider.setShowSellLabels(val),
+                    labelText: 'Mostrar texto (Precio y Tokens de venta)',
+                  ),
 
-              // 3. Órdenes Límite del Exchange
-              _buildCategoryCard(
-                context: context,
-                icon: Icons.pending_actions,
-                title: 'Órdenes Límite en Exchange',
-                subtitle: 'Órdenes vivas esperando ejecución en KuCoin / Binance',
-                color: Colors.amber,
-                lineVisible: settingsProvider.showOpenOrders,
-                onLineToggle: (val) => settingsProvider.setShowOpenOrders(val),
-                labelVisible: settingsProvider.showOpenOrderLabels,
-                onLabelToggle: (val) => settingsProvider.setShowOpenOrderLabels(val),
-                labelText: 'Mostrar texto (Tipo, Precio y Tamaño de orden)',
-              ),
+                  // 3. Órdenes Límite del Exchange
+                  _buildCategoryCard(
+                    context: context,
+                    icon: Icons.pending_actions,
+                    title: 'Órdenes Límite en Exchange',
+                    subtitle: 'Órdenes vivas esperando ejecución en KuCoin / Binance',
+                    color: Colors.amber,
+                    lineVisible: settingsProvider.showOpenOrders,
+                    onLineToggle: (val) => settingsProvider.setShowOpenOrders(val),
+                    labelVisible: settingsProvider.showOpenOrderLabels,
+                    onLabelToggle: (val) => settingsProvider.setShowOpenOrderLabels(val),
+                    labelText: 'Mostrar texto (Tipo, Precio y Tamaño de orden)',
+                  ),
 
-              // 4. Soportes y Resistencias
-              _buildCategoryCard(
-                context: context,
-                icon: Icons.edit_road,
-                title: 'Soportes y Resistencias (Dibujos)',
-                subtitle: 'Líneas y niveles clave dibujados manualmente',
-                color: AppColors.primary,
-                lineVisible: settingsProvider.showDrawings,
-                onLineToggle: (val) => settingsProvider.setShowDrawings(val),
-                labelVisible: settingsProvider.showDrawingLabels,
-                onLabelToggle: (val) => settingsProvider.setShowDrawingLabels(val),
-                labelText: 'Mostrar texto (Nombre de línea y Precio)',
-              ),
+                  // 4. Soportes y Resistencias
+                  _buildCategoryCard(
+                    context: context,
+                    icon: Icons.edit_road,
+                    title: 'Soportes y Resistencias (Dibujos)',
+                    subtitle: 'Líneas y niveles clave dibujados manualmente',
+                    color: AppColors.primary,
+                    lineVisible: settingsProvider.showDrawings,
+                    onLineToggle: (val) => settingsProvider.setShowDrawings(val),
+                    labelVisible: settingsProvider.showDrawingLabels,
+                    onLabelToggle: (val) => settingsProvider.setShowDrawingLabels(val),
+                    labelText: 'Mostrar texto (Nombre de línea y Precio)',
+                  ),
 
-              // 5. Precio de Mercado Actual
-              _buildCategoryCard(
-                context: context,
-                icon: Icons.show_chart,
-                title: 'Precio de Mercado en Vivo',
-                subtitle: 'Línea de cotización en tiempo real',
-                color: settingsProvider.currentPriceColor,
-                lineVisible: settingsProvider.showCurrentPriceLine,
-                onLineToggle: (val) => settingsProvider.setShowCurrentPriceLine(val),
-                labelVisible: settingsProvider.showCurrentPriceLabel,
-                onLabelToggle: (val) => settingsProvider.setShowCurrentPriceLabel(val),
-                labelText: 'Mostrar etiqueta con precio en vivo',
+                  // 5. Precio de Mercado Actual
+                  _buildCategoryCard(
+                    context: context,
+                    icon: Icons.show_chart,
+                    title: 'Precio de Mercado en Vivo',
+                    subtitle: 'Línea de cotización en tiempo real',
+                    color: settingsProvider.currentPriceColor,
+                    lineVisible: settingsProvider.showCurrentPriceLine,
+                    onLineToggle: (val) => settingsProvider.setShowCurrentPriceLine(val),
+                    labelVisible: settingsProvider.showCurrentPriceLabel,
+                    onLabelToggle: (val) => settingsProvider.setShowCurrentPriceLabel(val),
+                    labelText: 'Mostrar etiqueta con precio en vivo',
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cerrar', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
-        ),
-      ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cerrar', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
     );
   }
 }

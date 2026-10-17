@@ -16,7 +16,7 @@ class BingxService {
     return formatted;
   }
 
-  Future<List<Map<String, dynamic>>> fetchKlines(String symbol, String interval, {int limit = 150}) async {
+  Future<List<Map<String, dynamic>>> fetchKlines(String symbol, String interval, {int limit = 500}) async {
     final formattedSymbol = _formatSymbol(symbol);
     final url = Uri.parse('https://open-api.bingx.com/openApi/spot/v2/market/kline?symbol=$formattedSymbol&interval=$interval&limit=$limit');
 

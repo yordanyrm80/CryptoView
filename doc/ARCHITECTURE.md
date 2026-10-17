@@ -47,6 +47,19 @@ lib/
 │       └── providers/              # Gestor de estado del tracker y lógica de casamiento
 │
 └── main.dart                       # Inicialización, MultiProvider y Scaffold responsivo
+
+backend/                            # Motor Central de Ingestión 24/7 y API (Desplegado en /home/ubuntu/backend)
+├── app/
+│   ├── routers/                    # Endpoints FastAPI (candles, trades, symbols, api_keys, health)
+│   ├── services/                   # Colector 1m (collector.py), CCXT (exchange_client.py), Cifrado AES-256 (crypto.py)
+│   ├── auth.py                     # Validación de cabecera X-API-Key
+│   ├── config.py                   # Configuración Pydantic Settings
+│   ├── database.py                 # Pool de conexiones asyncpg
+│   └── main.py                     # Punto de entrada FastAPI
+├── sql/
+│   └── 01_init.sql                 # Esquema PostgreSQL 17 + TimescaleDB (Hypertable 1m + Continuous Aggregates)
+├── Dockerfile                      # Imagen Python 3.12-slim compatible con ARM64
+└── docker-compose.yml              # Stack (timescaledb, api, worker)
 ```
 
 ---

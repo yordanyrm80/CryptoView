@@ -1,0 +1,55 @@
+services:
+  # 1. Base de Datos: PostgreSQL 17 + TimescaleDB
+  timescaledb:
+    image: timescale/timescaledb-ha:pg17
+    container_name: cryptoview-timescaledb
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cryptoview}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cryptoview_secure_pwd}
+      POSTGRES_DB: ${POSTGRES_DB:-cryptoview_db}
+    ports:
+      # Expuesto solo internamente o restringido por firewall
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/home/postgres/pgdata/data
+      - ./sql/01_init.sql:/docker-entrypoint-initdb.d/01_init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cryptoview}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 2. API Gateway Privada (FastAPI)
+  api:
+    build: .
+    container_name: cryptoview-api
+    restart: unless-stopped
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-cryptoview}:${POSTGRES_PASSWORD:-cryptoview_secure_pwd}@timescaledb:5432/${POSTGRES_DB:-cryptoview_db}
+
+  # 3. Motor de Ingestión 24/7 (Worker)
+  worker:
+    build: .
+    container_name: cryptoview-worker
+    restart: unless-stopped
+    command: python -m app.services.collector
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-cryptoview}:${POSTGRES_PASSWORD:-cryptoview_secure_pwd}@timescaledb:5432/${POSTGRES_DB:-cryptoview_db}
+
+volumes:
+  pgdata:
+    driver: local

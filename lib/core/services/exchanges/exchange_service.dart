@@ -1,3 +1,4 @@
+import '../cloud_api_service.dart';
 import 'binance_service.dart';
 import 'kucoin_service.dart';
 import 'bingx_service.dart';
@@ -11,8 +12,19 @@ class ExchangeService {
   final KucoinService _kucoin = KucoinService.instance;
   final BingxService _bingx = BingxService.instance;
 
-  /// Fetch K-lines / candlesticks from specified exchange
-  Future<List<Map<String, dynamic>>> fetchKlines(String exchange, String symbol, String interval, {int limit = 150}) async {
+  /// Fetch K-lines / candlesticks from Central Cloud Data Engine first, with automatic fallback to direct exchange API
+  Future<List<Map<String, dynamic>>> fetchKlines(String exchange, String symbol, String interval, {int limit = 500}) async {
+    final cloudCandles = await CloudApiService.instance.fetchCandles(
+      exchange,
+      symbol,
+      interval,
+      limit: limit < 1500 ? 1500 : limit,
+      autoTrack: false,
+    );
+    if (cloudCandles.isNotEmpty) {
+      return cloudCandles;
+    }
+
     final ex = exchange.toLowerCase();
     if (ex == 'binance') {
       return await _binance.fetchKlines(symbol, interval, limit: limit);
@@ -24,13 +36,13 @@ class ExchangeService {
     return [];
   }
 
-  Future<List<Map<String, dynamic>>> fetchBinanceKlines(String symbol, String interval, {int limit = 150}) =>
+  Future<List<Map<String, dynamic>>> fetchBinanceKlines(String symbol, String interval, {int limit = 500}) =>
       _binance.fetchKlines(symbol, interval, limit: limit);
 
   Future<List<Map<String, dynamic>>> fetchKucoinKlines(String symbol, String interval) =>
       _kucoin.fetchCandles(symbol, interval);
 
-  Future<List<Map<String, dynamic>>> fetchBingXKlines(String symbol, String interval, {int limit = 150}) =>
+  Future<List<Map<String, dynamic>>> fetchBingXKlines(String symbol, String interval, {int limit = 500}) =>
       _bingx.fetchKlines(symbol, interval, limit: limit);
 
   /// Fetch current prices for a list of symbols from specified exchange

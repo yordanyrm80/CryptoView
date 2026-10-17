@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../../core/database/database_helper.dart';
 import '../../../core/utils/exchange_service.dart';
+import '../domain/models/chart_candle_model.dart';
 
 class ChartProvider extends ChangeNotifier {
   List<Map<String, dynamic>> _candles = [];
+  List<ChartData> _chartData = [];
   List<Map<String, dynamic>> _drawings = [];
   bool _isLoading = false;
   bool _isDrawingMode = false; // Kept for backwards compatibility
@@ -34,11 +36,26 @@ class ChartProvider extends ChangeNotifier {
   }
 
   List<Map<String, dynamic>> get candles => _candles;
+  List<ChartData> get chartData => _chartData;
   List<Map<String, dynamic>> get drawings => _drawings;
   bool get isLoading => _isLoading;
   bool get isDrawingMode => _isDrawingMode;
   String get activeInterval => _activeInterval;
   String get activeTool => _activeTool;
+
+  void _rebuildChartData() {
+    _chartData = List<ChartData>.unmodifiable(
+      _candles.map<ChartData>((c) {
+        return ChartData(
+          date: DateTime.fromMillisecondsSinceEpoch((c['time'] as int) * 1000),
+          open: (c['open'] as num).toDouble(),
+          high: (c['high'] as num).toDouble(),
+          low: (c['low'] as num).toDouble(),
+          close: (c['close'] as num).toDouble(),
+        );
+      }),
+    );
+  }
 
   // Ruler getters
   double? get rulerStartPrice => _rulerStartPrice;
@@ -79,7 +96,7 @@ class ChartProvider extends ChangeNotifier {
 
   // Handle ruler tap coordinates
   void handleRulerTap(double price, DateTime time) {
-    if (_rulerStartPrice == null) {
+    if (_rulerStartPrice == null || _rulerEndPrice != null) {
       _rulerStartPrice = price;
       _rulerStartTime = time;
       _rulerEndPrice = null;
@@ -90,7 +107,6 @@ class ChartProvider extends ChangeNotifier {
       _rulerEndPrice = price;
       _rulerEndTime = time;
       _rulerPercent = ((_rulerEndPrice! - _rulerStartPrice!) / _rulerStartPrice!) * 100;
-      // Do not reset tool automatically, so the user can see the calculation.
       notifyListeners();
     }
   }
@@ -144,29 +160,69 @@ class ChartProvider extends ChangeNotifier {
 
   // Load candle data & SQLite drawings for selected exchange + symbol
   Future<void> loadChartData(String exchange, String symbol) async {
-    _isLoading = true;
-    _candles = [];
-    _drawings = [];
-    
     // Clear current ruler when changing symbol/pair
     _rulerStartPrice = null;
     _rulerStartTime = null;
     _rulerEndPrice = null;
     _rulerEndTime = null;
     _rulerPercent = null;
-    
-    notifyListeners();
+
+    // 1. Immediately load any previously saved candles from local SQLite
+    try {
+      final cached = await DatabaseHelper.instance.getCandles(
+        exchange: exchange,
+        symbol: symbol,
+        interval: _activeInterval,
+        limit: 1500,
+      );
+      if (cached.isNotEmpty) {
+        _candles = cached;
+        _rebuildChartData();
+        _isLoading = false;
+        notifyListeners();
+      } else {
+        _isLoading = true;
+        _candles = [];
+        _rebuildChartData();
+        notifyListeners();
+      }
+    } catch (e) {
+      _isLoading = true;
+      _candles = [];
+      _rebuildChartData();
+      notifyListeners();
+    }
 
     try {
-      // 1. Fetch candles from exchange using activeInterval
+      // 2. Fetch fresh candles from Cloud Data Engine (or fallback exchange) using activeInterval
       List<Map<String, dynamic>> fetchedCandles = await ExchangeService.instance.fetchKlines(
         exchange,
         symbol,
         _activeInterval,
+        limit: 1500,
       );
-      _candles = fetchedCandles;
 
-      // 2. Fetch drawings from SQLite
+      if (fetchedCandles.isNotEmpty) {
+        // 3. Save / Upsert fetched candles into SQLite
+        await DatabaseHelper.instance.saveCandles(
+          exchange: exchange,
+          symbol: symbol,
+          interval: _activeInterval,
+          candles: fetchedCandles,
+        );
+
+        // 4. Retrieve complete merged history from SQLite
+        final merged = await DatabaseHelper.instance.getCandles(
+          exchange: exchange,
+          symbol: symbol,
+          interval: _activeInterval,
+          limit: 1500,
+        );
+        _candles = merged.isNotEmpty ? merged : fetchedCandles;
+        _rebuildChartData();
+      }
+
+      // 5. Fetch drawings from SQLite
       _drawings = List<Map<String, dynamic>>.from(await DatabaseHelper.instance.queryDrawings(symbol, exchange));
     } catch (e) {
       print('Error loading chart data: $e');

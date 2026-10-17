@@ -11,6 +11,7 @@ class MatchTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isExpense = match.isExpenseMatch;
     final profit = match.profit;
     final isProfit = profit >= 0;
     final dateStr = '${match.date.day}/${match.date.month}/${match.date.year}';
@@ -33,14 +34,19 @@ class MatchTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: isProfit ? AppColors.bull.withValues(alpha: 0.3) : AppColors.bear.withValues(alpha: 0.3), width: 1),
+        border: Border.all(
+          color: isExpense
+              ? Colors.orange.withValues(alpha: 0.3)
+              : (isProfit ? AppColors.bull.withValues(alpha: 0.3) : AppColors.bear.withValues(alpha: 0.3)),
+          width: 1,
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Row 1: Symbol & Match badge | Net Profit in USDT
+            // Row 1: Symbol & Match badge | Net Profit or Expense Tag
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -49,33 +55,64 @@ class MatchTile extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: isProfit ? AppColors.bull.withValues(alpha: 0.1) : AppColors.bear.withValues(alpha: 0.1),
+                        color: isExpense
+                            ? Colors.orange.withValues(alpha: 0.12)
+                            : (isProfit ? AppColors.bull.withValues(alpha: 0.1) : AppColors.bear.withValues(alpha: 0.1)),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Icon(
-                        isProfit ? Icons.trending_up : Icons.trending_down,
-                        color: isProfit ? AppColors.bull : AppColors.bear,
+                        isExpense ? Icons.shopping_bag_outlined : (isProfit ? Icons.trending_up : Icons.trending_down),
+                        color: isExpense ? Colors.orange : (isProfit ? AppColors.bull : AppColors.bear),
                         size: 18,
                       ),
                     ),
                     const SizedBox(width: 10),
-                    Text(
-                      symbol,
-                      style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          symbol,
+                          style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                        if (isExpense)
+                          Text(
+                            match.expenseCategory ?? 'Gasto Personal',
+                            style: const TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.bold),
+                          ),
+                      ],
                     ),
                   ],
                 ),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text(
-                      '${isProfit ? '+' : ''}\$${profit.toStringAsFixed(2)} $quoteAsset',
-                      style: TextStyle(color: isProfit ? AppColors.bull : AppColors.bear, fontWeight: FontWeight.bold, fontSize: 16),
-                    ),
-                    Text(
-                      '${profitPercent >= 0 ? '+' : ''}${profitPercent.toStringAsFixed(2)}%',
-                      style: TextStyle(color: isProfit ? AppColors.bull : AppColors.bear, fontSize: 11, fontWeight: FontWeight.bold),
-                    ),
+                    if (isExpense) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppColors.bull.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'CONCILIADO',
+                          style: TextStyle(color: AppColors.bull, fontWeight: FontWeight.bold, fontSize: 11),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '\$${buyTotalQuote.toStringAsFixed(2)} $quoteAsset',
+                        style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                      ),
+                    ] else ...[
+                      Text(
+                        '${isProfit ? '+' : ''}\$${profit.toStringAsFixed(2)} $quoteAsset',
+                        style: TextStyle(color: isProfit ? AppColors.bull : AppColors.bear, fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      Text(
+                        '${profitPercent >= 0 ? '+' : ''}${profitPercent.toStringAsFixed(2)}%',
+                        style: TextStyle(color: isProfit ? AppColors.bull : AppColors.bear, fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
+                    ],
                   ],
                 ),
               ],
@@ -106,10 +143,19 @@ class MatchTile extends StatelessWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      const Text('VENTA', style: TextStyle(color: AppColors.bear, fontSize: 10, fontWeight: FontWeight.bold)),
+                      Text(
+                        isExpense ? 'GASTO / CONSUMO' : 'VENTA',
+                        style: TextStyle(color: isExpense ? Colors.orange : AppColors.bear, fontSize: 10, fontWeight: FontWeight.bold),
+                      ),
                       const SizedBox(height: 2),
-                      Text('\$${sellPrice.toStringAsFixed(2)}', style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
-                      Text('Total: \$${sellTotalQuote.toStringAsFixed(2)} $quoteAsset', style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+                      Text(
+                        isExpense ? (match.notes.isNotEmpty ? match.notes : (match.expenseDescription ?? 'Gasto')) : '\$${sellPrice.toStringAsFixed(2)}',
+                        style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (!isExpense)
+                        Text('Total: \$${sellTotalQuote.toStringAsFixed(2)} $quoteAsset', style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
                     ],
                   ),
                 ],

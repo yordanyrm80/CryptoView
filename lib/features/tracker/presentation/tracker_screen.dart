@@ -7,11 +7,13 @@ import '../../watchlist/providers/watchlist_provider.dart';
 import 'widgets/metrics_header_card.dart';
 import 'widgets/match_tile.dart';
 import 'widgets/transaction_tile.dart';
-import 'widgets/add_transaction_dialog.dart';
+import 'widgets/withdrawal_tile.dart';
+import 'widgets/add_expense_dialog.dart';
 import 'widgets/api_config_dialog.dart';
 import 'widgets/match_confirm_dialog.dart';
 import 'widgets/transaction_detail_sheet.dart';
 import 'widgets/select_match_candidate_sheet.dart';
+import '../domain/withdrawal_model.dart';
 
 class TrackerScreen extends StatefulWidget {
   const TrackerScreen({Key? key}) : super(key: key);
@@ -31,7 +33,7 @@ class _TrackerScreenState extends State<TrackerScreen> with SingleTickerProvider
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<TrackerProvider>(context, listen: false).loadData();
     });
@@ -61,18 +63,6 @@ class _TrackerScreenState extends State<TrackerScreen> with SingleTickerProvider
   void dispose() {
     _tabController.dispose();
     super.dispose();
-  }
-
-  void _showAddTransactionDialog() {
-    final watchlistProvider = Provider.of<WatchlistProvider>(context, listen: false);
-    final trackerProvider = Provider.of<TrackerProvider>(context, listen: false);
-    showDialog(
-      context: context,
-      builder: (_) => AddTransactionDialog(
-        watchlistProvider: watchlistProvider,
-        trackerProvider: trackerProvider,
-      ),
-    );
   }
 
   void _showApiConfigDialog() {
@@ -107,6 +97,309 @@ class _TrackerScreenState extends State<TrackerScreen> with SingleTickerProvider
         onMatchedSuccessfully: () {
           _tabController.animateTo(0);
         },
+      ),
+    );
+  }
+
+  void _showConfirmMatchDialogFromExpense(
+    TransactionModel buy,
+    WithdrawalModel expense,
+    double maxMatchable,
+    String currency,
+    TrackerProvider provider,
+  ) {
+    String formatAmount(double val) {
+      String s = val.toStringAsFixed(8);
+      while (s.contains('.') && (s.endsWith('0') || s.endsWith('.'))) {
+        s = s.substring(0, s.length - 1);
+      }
+      return s;
+    }
+
+    final amountController = TextEditingController(text: formatAmount(maxMatchable));
+    final noteController = TextEditingController(text: expense.description ?? '');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.shopping_bag_outlined, color: Colors.orange, size: 20),
+            SizedBox(width: 8),
+            Text(
+              'Casar Gasto con Compra',
+              style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Estás asociando el gasto de ${expense.currency} con la compra de ${buy.symbol} (\$${buy.price.toStringAsFixed(2)}).',
+              style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            const Text('Cantidad a Conciliar', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+            const SizedBox(height: 4),
+            TextField(
+              controller: amountController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
+              decoration: InputDecoration(
+                suffixText: currency,
+                suffixStyle: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
+                filled: true,
+                fillColor: AppColors.card,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.border)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text('Nota / Concepto', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+            const SizedBox(height: 4),
+            TextField(
+              controller: noteController,
+              style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+              decoration: InputDecoration(
+                hintText: 'Ej. Amazon 1000 MXN, Walmart, etc.',
+                hintStyle: const TextStyle(color: AppColors.textMuted),
+                filled: true,
+                fillColor: AppColors.card,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.border)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar', style: TextStyle(color: AppColors.textMuted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.black,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () async {
+              final qty = double.tryParse(amountController.text.trim()) ?? 0.0;
+              if (qty <= 0 || qty > maxMatchable + 0.000001) return;
+
+              Navigator.pop(ctx);
+              final success = await provider.matchBuyWithExpense(
+                buy: buy,
+                expense: expense,
+                amountToMatch: qty,
+                note: noteController.text.trim(),
+              );
+
+              if (success) {
+                _tabController.animateTo(0);
+              }
+            },
+            child: const Text('Confirmar Casamiento', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showMatchBuyForExpenseSheet(WithdrawalModel expense, TrackerProvider provider) {
+    final currency = expense.currency.toUpperCase();
+    final candidateBuys = provider.openBuys.where((tx) {
+      final parts = tx.symbol.split('/');
+      final base = parts.isNotEmpty ? parts[0] : (tx.symbol.contains('-') ? tx.symbol.split('-')[0] : tx.symbol);
+      return base.toUpperCase() == currency && provider.getRemainingAmount(tx) > 0.000001;
+    }).toList();
+
+    final remainingExpense = provider.getRemainingWithdrawalAmount(expense);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.8,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Casar Gasto con Compra de $currency',
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: AppColors.textMuted, size: 20),
+                  onPressed: () => Navigator.pop(ctx),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        (expense.description != null && expense.description!.isNotEmpty)
+                            ? expense.description!
+                            : 'Gasto / Retiro en $currency',
+                        style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Total: ${expense.amount} $currency · ${expense.exchange}',
+                        style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      const Text('Por conciliar:', style: TextStyle(color: AppColors.textMuted, fontSize: 10)),
+                      Text(
+                        '$remainingExpense $currency',
+                        style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'Selecciona una compra abierta para conciliar:',
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: candidateBuys.isEmpty
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.link_off, size: 44, color: AppColors.border),
+                            const SizedBox(height: 10),
+                            Text(
+                              'No hay compras abiertas disponibles de $currency.',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      physics: const BouncingScrollPhysics(),
+                      itemCount: candidateBuys.length,
+                      itemBuilder: (context, index) {
+                        final buyTx = candidateBuys[index];
+                        final buyRemaining = provider.getRemainingAmount(buyTx);
+                        final maxMatch = remainingExpense < buyRemaining ? remainingExpense : buyRemaining;
+                        final buyDateStr = '${buyTx.date.day.toString().padLeft(2, '0')}/${buyTx.date.month.toString().padLeft(2, '0')}/${buyTx.date.year}';
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppColors.card,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.bull.withValues(alpha: 0.15),
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: const Text('COMPRA', style: TextStyle(color: AppColors.bull, fontSize: 9, fontWeight: FontWeight.bold)),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text('$buyDateStr · ${buyTx.exchange}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text('Precio: \$${buyTx.price.toStringAsFixed(buyTx.price < 1 ? 4 : 2)}', style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
+                                    const SizedBox(height: 2),
+                                    Text('Disponible: $buyRemaining $currency', style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+                                  ],
+                                ),
+                              ),
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.orange,
+                                  foregroundColor: Colors.black,
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                                  minimumSize: const Size(64, 32),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                ),
+                                onPressed: () {
+                                  Navigator.pop(ctx);
+                                  _showConfirmMatchDialogFromExpense(buyTx, expense, maxMatch, currency, provider);
+                                },
+                                icon: const Icon(Icons.link, size: 14),
+                                label: const Text('Casar', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -270,6 +563,78 @@ class _TrackerScreenState extends State<TrackerScreen> with SingleTickerProvider
     }
   }
 
+  void _showAddExpenseDialog() {
+    final trackerProvider = Provider.of<TrackerProvider>(context, listen: false);
+    final watchlistProvider = Provider.of<WatchlistProvider>(context, listen: false);
+    showDialog(
+      context: context,
+      builder: (_) => AddExpenseDialog(
+        provider: trackerProvider,
+        defaultCurrency: trackerProvider.currentBaseAsset,
+        defaultExchange: watchlistProvider.currentExchange,
+      ),
+    );
+  }
+
+  Future<void> _syncWithdrawalsApi() async {
+    final trackerProvider = Provider.of<TrackerProvider>(context, listen: false);
+    final watchlistProvider = Provider.of<WatchlistProvider>(context, listen: false);
+    final currentExchange = watchlistProvider.currentExchange;
+
+    setState(() => _isSyncing = true);
+    try {
+      final count = await trackerProvider.importWithdrawalsFromApi(currentExchange);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppColors.surface,
+            content: Text('Sincronización de retiros completada: $count retiros nuevos importados.'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppColors.bear,
+            content: Text('Error al sincronizar retiros: $e'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSyncing = false);
+    }
+  }
+
+  Future<void> _syncBitrefillApi() async {
+    final trackerProvider = Provider.of<TrackerProvider>(context, listen: false);
+    setState(() => _isSyncing = true);
+    try {
+      final count = await trackerProvider.syncBitrefillOrders();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppColors.surface,
+            content: Text(count > 0
+                ? 'Bitrefill: $count nuevos gastos importados vía API.'
+                : 'Bitrefill: Todos tus gastos están al día.'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppColors.bear,
+            content: Text('Error al sincronizar Bitrefill: $e'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSyncing = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final trackerProvider = Provider.of<TrackerProvider>(context);
@@ -278,6 +643,7 @@ class _TrackerScreenState extends State<TrackerScreen> with SingleTickerProvider
     final currentMatches = trackerProvider.filteredMatches;
     final currentBuys = trackerProvider.filteredOpenBuys;
     final currentSells = trackerProvider.filteredOpenSells;
+    final currentExpenses = trackerProvider.filteredWithdrawals;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -317,10 +683,13 @@ class _TrackerScreenState extends State<TrackerScreen> with SingleTickerProvider
           indicatorWeight: 3,
           labelColor: AppColors.primary,
           unselectedLabelColor: AppColors.textSecondary,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
           tabs: [
             Tab(text: 'Casados (${currentMatches.length})'),
             Tab(text: 'Compras (${currentBuys.length})'),
             Tab(text: 'Ventas (${currentSells.length})'),
+            Tab(text: 'Gastos (${currentExpenses.length})'),
           ],
         ),
       ),
@@ -418,7 +787,7 @@ class _TrackerScreenState extends State<TrackerScreen> with SingleTickerProvider
                               style: const TextStyle(color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.bold),
                             ),
                             const SizedBox(height: 6),
-                            const Text('Empareja una compra con una venta para calcular PnL.', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                            const Text('Empareja una compra con una venta o gasto para conciliar.', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
                           ],
                         ),
                       )
@@ -443,7 +812,7 @@ class _TrackerScreenState extends State<TrackerScreen> with SingleTickerProvider
                               style: const TextStyle(color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.bold),
                             ),
                             const SizedBox(height: 6),
-                            const Text('Sincroniza desde API o registra una con el botón +.', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                            const Text('Sincroniza tus órdenes vía API con el botón de la barra superior.', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
                           ],
                         ),
                       )
@@ -477,7 +846,7 @@ class _TrackerScreenState extends State<TrackerScreen> with SingleTickerProvider
                               style: const TextStyle(color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.bold),
                             ),
                             const SizedBox(height: 6),
-                            const Text('Sincroniza desde API o registra una con el botón +.', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                            const Text('Sincroniza tus órdenes vía API con el botón de la barra superior.', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
                           ],
                         ),
                       )
@@ -495,17 +864,114 @@ class _TrackerScreenState extends State<TrackerScreen> with SingleTickerProvider
                           );
                         },
                       ),
+
+                // Tab 4: Gastos y Retiros
+                Column(
+                  children: [
+                    // Action toolbar for expenses
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.primary,
+                                side: const BorderSide(color: AppColors.primary),
+                                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              onPressed: (trackerProvider.isImporting || _isSyncing) ? null : _syncWithdrawalsApi,
+                              icon: const Icon(Icons.cloud_download_outlined, size: 14),
+                              label: const Text('Retiros Exchange', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFF00E5FF),
+                                side: const BorderSide(color: Color(0xFF00E5FF)),
+                                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              onPressed: (trackerProvider.isImporting || _isSyncing) ? null : _syncBitrefillApi,
+                              icon: const Icon(Icons.bolt_rounded, size: 15, color: Color(0xFF00E5FF)),
+                              label: const Text('Sync Bitrefill', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.orange,
+                                foregroundColor: Colors.black,
+                                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              ),
+                              onPressed: _showAddExpenseDialog,
+                              icon: const Icon(Icons.add, size: 15),
+                              label: const Text('Registrar', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: currentExpenses.isEmpty
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.shopping_bag_outlined, size: 54, color: AppColors.border),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    trackerProvider.filterOnlyCurrentSymbol
+                                        ? 'No hay gastos ni retiros registrados en ${trackerProvider.currentBaseAsset}'
+                                        : 'No hay gastos ni retiros registrados',
+                                    style: const TextStyle(color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.bold),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  const Text(
+                                    'Sincroniza desde la API o registra pagos de Amazon, Walmart, etc.',
+                                    style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+                                  ),
+                                  if (trackerProvider.filterOnlyCurrentSymbol && trackerProvider.withdrawals.isNotEmpty) ...[
+                                    const SizedBox(height: 14),
+                                    OutlinedButton.icon(
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: AppColors.primary,
+                                        side: const BorderSide(color: AppColors.primary),
+                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
+                                      onPressed: () => trackerProvider.setFilterOnlyCurrentSymbol(false),
+                                      icon: const Icon(Icons.visibility_outlined, size: 14),
+                                      label: Text('Ver todos los gastos (${trackerProvider.withdrawals.length})', style: const TextStyle(fontSize: 12)),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            )
+                          : ListView.builder(
+                              physics: const BouncingScrollPhysics(),
+                              itemCount: currentExpenses.length,
+                              itemBuilder: (context, i) {
+                                final exp = currentExpenses[i];
+                                return WithdrawalTile(
+                                  withdrawal: exp,
+                                  provider: trackerProvider,
+                                  onSelectForMatch: () => _showMatchBuyForExpenseSheet(exp, trackerProvider),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: AppColors.primary,
-        foregroundColor: AppColors.background,
-        icon: const Icon(Icons.add),
-        label: const Text('Nueva Operación', style: TextStyle(fontWeight: FontWeight.bold)),
-        onPressed: _showAddTransactionDialog,
       ),
     );
   }

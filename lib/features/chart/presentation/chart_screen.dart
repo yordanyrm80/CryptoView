@@ -31,23 +31,99 @@ class ChartScreen extends StatefulWidget {
 
 class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStateMixin {
   late TabController _mainTabController;
+  late final ZoomPanBehavior _zoomPanBehavior;
+  late final ZoomPanBehavior _noPanBehavior;
   ChartSeriesController? _chartSeriesController;
   String? _lastLoadedSymbol;
   String? _lastLoadedExchange;
   String? _lastLoadedInterval;
+  bool _hasUserZoomedOrPanned = false;
+  double? _userZoomFactor;
+  double? _userZoomPosition;
   String? _draggingLine;
   int? _draggingDrawingIndex;
   int? _draggingDrawingId;
   double? _visibleMinY;
   double? _visibleMaxY;
-  DateTime? _visibleMinX;
-  DateTime? _visibleMaxX;
+
+  void _handleZoomChange(ZoomPanArgs args) {
+    if (args.axis?.name == 'primaryXAxis') {
+      _userZoomFactor = args.currentZoomFactor;
+      _userZoomPosition = args.currentZoomPosition;
+      if (!_hasUserZoomedOrPanned) {
+        setState(() {
+          _hasUserZoomedOrPanned = true;
+        });
+      }
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _mainTabController = TabController(length: 3, vsync: this);
     _mainTabController.addListener(_handleTabChange);
+    _zoomPanBehavior = ZoomPanBehavior(
+      enablePinching: true,
+      enablePanning: true,
+      enableMouseWheelZooming: true,
+      zoomMode: ZoomMode.x,
+    );
+    _noPanBehavior = ZoomPanBehavior(
+      enablePinching: true,
+      enablePanning: false,
+      enableMouseWheelZooming: true,
+      zoomMode: ZoomMode.x,
+    );
+  }
+
+  DateTime _parseTappedTime(dynamic xVal, List<ChartData> chartData) {
+    if (xVal is DateTime) return xVal;
+    if (xVal is num) {
+      final num val = xVal;
+      if (val > 1000000000) {
+        return DateTime.fromMillisecondsSinceEpoch(val.toInt());
+      } else if (chartData.isNotEmpty) {
+        final idx = val.toInt().clamp(0, chartData.length - 1);
+        return chartData[idx].date;
+      }
+    }
+    return DateTime.now();
+  }
+
+  DateFormat _getAxisDateFormat(String interval) {
+    if (interval == '1d') {
+      return DateFormat('MM/dd');
+    } else if (interval == '4h') {
+      return DateFormat('MM/dd HH:mm');
+    } else {
+      return DateFormat('HH:mm');
+    }
+  }
+
+  DateTime? _getRulerMidpointDate(ChartProvider provider, List<ChartData> chartData) {
+    if (provider.rulerStartTime == null || provider.rulerEndTime == null || chartData.isEmpty) {
+      return null;
+    }
+    final int startIdx = chartData.indexWhere((c) => c.date.isAtSameMomentAs(provider.rulerStartTime!));
+    final int endIdx = chartData.indexWhere((c) => c.date.isAtSameMomentAs(provider.rulerEndTime!));
+
+    if (startIdx != -1 && endIdx != -1) {
+      final int midIdx = ((startIdx + endIdx) / 2).round().clamp(0, chartData.length - 1);
+      return chartData[midIdx].date;
+    }
+
+    final double midMs = (provider.rulerStartTime!.millisecondsSinceEpoch + provider.rulerEndTime!.millisecondsSinceEpoch) / 2.0;
+    ChartData closest = chartData.first;
+    double minDiff = (closest.date.millisecondsSinceEpoch - midMs).abs().toDouble();
+    for (final c in chartData) {
+      final double diff = (c.date.millisecondsSinceEpoch - midMs).abs().toDouble();
+      if (diff < minDiff) {
+        minDiff = diff;
+        closest = c;
+      }
+    }
+    return closest.date;
   }
 
   void _handleTabChange() {
@@ -79,12 +155,17 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
       _lastLoadedSymbol = watchlistProvider.selectedSymbol;
       _lastLoadedExchange = watchlistProvider.currentExchange;
       _lastLoadedInterval = chartProvider.activeInterval;
+      _hasUserZoomedOrPanned = false;
+      _userZoomFactor = null;
+      _userZoomPosition = null;
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        chartProvider.loadChartData(
-          watchlistProvider.currentExchange,
-          watchlistProvider.selectedSymbol,
-        );
+        if (mounted) {
+          chartProvider.loadChartData(
+            watchlistProvider.currentExchange,
+            watchlistProvider.selectedSymbol,
+          );
+        }
       });
     }
   }
@@ -236,15 +317,18 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
     final String currentExchange = watchlistProvider.currentExchange;
     final double? currentPrice = watchlistProvider.prices[currentSymbol];
 
-    final List<ChartData> chartData = chartProvider.candles.map<ChartData>((c) {
-      return ChartData(
-        date: DateTime.fromMillisecondsSinceEpoch((c['time'] as int) * 1000),
-        open: (c['open'] as num).toDouble(),
-        high: (c['high'] as num).toDouble(),
-        low: (c['low'] as num).toDouble(),
-        close: (c['close'] as num).toDouble(),
-      );
-    }).toList();
+    if (_lastLoadedSymbol != currentSymbol ||
+        _lastLoadedExchange != currentExchange ||
+        _lastLoadedInterval != chartProvider.activeInterval) {
+      _lastLoadedSymbol = currentSymbol;
+      _lastLoadedExchange = currentExchange;
+      _lastLoadedInterval = chartProvider.activeInterval;
+      _hasUserZoomedOrPanned = false;
+      _userZoomFactor = null;
+      _userZoomPosition = null;
+    }
+
+    final List<ChartData> chartData = chartProvider.chartData;
 
     final List<PlotBand> plotBands = settingsProvider.showDrawings
         ? chartProvider.drawings.map<PlotBand>((d) {
@@ -292,8 +376,11 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
 
     // 2. Automatic Purchase Lines Integration
     if (settingsProvider.showBuyLines) {
+      final cleanCurrentSymbol = currentSymbol.replaceAll('-', '').replaceAll('/', '').toUpperCase();
       final List<TransactionModel> activeBuys = trackerProvider.openBuys
-          .where((tx) => tx.symbol.toLowerCase() == currentSymbol.toLowerCase() && tx.exchange.toLowerCase() == currentExchange.toLowerCase())
+          .where((tx) =>
+              tx.symbol.replaceAll('-', '').replaceAll('/', '').toUpperCase() == cleanCurrentSymbol &&
+              tx.exchange.toLowerCase() == currentExchange.toLowerCase())
           .toList();
 
       for (var buy in activeBuys) {
@@ -323,8 +410,11 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
 
     // 3. Automatic Sell Lines Integration
     if (settingsProvider.showSellLines) {
+      final cleanCurrentSymbol = currentSymbol.replaceAll('-', '').replaceAll('/', '').toUpperCase();
       final List<TransactionModel> activeSells = trackerProvider.openSells
-          .where((tx) => tx.symbol.toLowerCase() == currentSymbol.toLowerCase() && tx.exchange.toLowerCase() == currentExchange.toLowerCase())
+          .where((tx) =>
+              tx.symbol.replaceAll('-', '').replaceAll('/', '').toUpperCase() == cleanCurrentSymbol &&
+              tx.exchange.toLowerCase() == currentExchange.toLowerCase())
           .toList();
 
       for (var sell in activeSells) {
@@ -573,9 +663,7 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
                       final CartesianChartPoint<dynamic>? tappedPoint = _chartSeriesController!.pixelToPoint(args.position);
                       if (tappedPoint == null || tappedPoint.y == null || tappedPoint.x == null) return;
 
-                      DateTime tappedTime = tappedPoint.x is DateTime
-                          ? tappedPoint.x as DateTime
-                          : DateTime.fromMillisecondsSinceEpoch((tappedPoint.x as num).toInt());
+                      DateTime tappedTime = _parseTappedTime(tappedPoint.x, chartData);
 
                       final double touchY = args.position.dy;
                       final double touchX = args.position.dx;
@@ -645,9 +733,7 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
                       if (tappedPoint == null || tappedPoint.y == null || tappedPoint.x == null) return;
 
                       final double newPrice = (tappedPoint.y as num).toDouble();
-                      DateTime newTime = tappedPoint.x is DateTime
-                          ? tappedPoint.x as DateTime
-                          : DateTime.fromMillisecondsSinceEpoch((tappedPoint.x as num).toInt());
+                      DateTime newTime = _parseTappedTime(tappedPoint.x, chartData);
 
                       if (_draggingLine == 'start') chartProvider.updateRulerStartPrice(newPrice);
                       else if (_draggingLine == 'end') chartProvider.updateRulerEndPrice(newPrice);
@@ -676,9 +762,7 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
                       if (tappedPoint == null || tappedPoint.y == null || tappedPoint.x == null) return;
 
                       final double tappedPrice = (tappedPoint.y as num).toDouble();
-                      DateTime tappedTime = tappedPoint.x is DateTime
-                          ? tappedPoint.x as DateTime
-                          : DateTime.fromMillisecondsSinceEpoch((tappedPoint.x as num).toInt());
+                      DateTime tappedTime = _parseTappedTime(tappedPoint.x, chartData);
 
                       if (chartProvider.activeTool == 'horizontal_line') {
                         _showAddLineDialog(tappedPrice, watchlistProvider, chartProvider);
@@ -700,12 +784,21 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
                         );
                       }
                     },
-                    zoomPanBehavior: ZoomPanBehavior(
-                      enablePinching: true,
-                      enablePanning: chartProvider.activeTool == 'none' && _draggingLine == null,
-                      enableMouseWheelZooming: true,
-                      zoomMode: ZoomMode.x,
-                    ),
+                    zoomPanBehavior: (chartProvider.activeTool == 'none' && _draggingLine == null)
+                        ? _zoomPanBehavior
+                        : _noPanBehavior,
+                    onZoomStart: _handleZoomChange,
+                    onZooming: _handleZoomChange,
+                    onZoomEnd: _handleZoomChange,
+                    onZoomReset: (ZoomPanArgs args) {
+                      if (args.axis?.name == 'primaryXAxis') {
+                        setState(() {
+                          _hasUserZoomedOrPanned = false;
+                          _userZoomFactor = null;
+                          _userZoomPosition = null;
+                        });
+                      }
+                    },
                     crosshairBehavior: CrosshairBehavior(
                       enable: true,
                       lineType: CrosshairLineType.horizontal,
@@ -714,24 +807,31 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
                       lineWidth: 1,
                       lineDashArray: const <double>[4, 3],
                     ),
+                    onCrosshairPositionChanging: (CrosshairRenderArgs args) {
+                      if (args.orientation == AxisOrientation.horizontal && args.value != null) {
+                        final DateTime dt = _parseTappedTime(args.value, chartData);
+                        args.text = DateFormat('dd/MM/yyyy HH:mm').format(dt);
+                      }
+                    },
                     onActualRangeChanged: (ActualRangeChangedArgs args) {
                       if (args.axisName == 'primaryYAxis') {
                         _visibleMinY = args.visibleMin.toDouble();
                         _visibleMaxY = args.visibleMax.toDouble();
-                      } else if (args.axisName == 'primaryXAxis') {
-                        _visibleMinX = DateTime.fromMillisecondsSinceEpoch(args.visibleMin.toInt());
-                        _visibleMaxX = DateTime.fromMillisecondsSinceEpoch(args.visibleMax.toInt());
                       }
                     },
-                    primaryXAxis: DateTimeAxis(
-                      dateFormat: DateFormat.MMMd(),
+                    primaryXAxis: DateTimeCategoryAxis(
+                      name: 'primaryXAxis',
+                      dateFormat: _getAxisDateFormat(chartProvider.activeInterval),
                       majorGridLines: const MajorGridLines(color: AppColors.gridLine, width: 0.5),
                       borderColor: Colors.transparent,
                       axisLine: const AxisLine(color: AppColors.gridLine),
-                      minimum: _draggingLine != null ? _visibleMinX : null,
-                      maximum: _draggingLine != null ? _visibleMaxX : null,
+                      initialZoomFactor: _userZoomFactor ?? 1.0,
+                      initialZoomPosition: _userZoomPosition ?? 0.0,
+                      autoScrollingDelta: _hasUserZoomedOrPanned ? null : 50,
+                      autoScrollingMode: AutoScrollingMode.end,
                     ),
                     primaryYAxis: NumericAxis(
+                      name: 'primaryYAxis',
                       opposedPosition: true,
                       numberFormat: NumberFormat.simpleCurrency(decimalDigits: currentPrice != null && currentPrice < 1.0 ? 4 : 2),
                       majorGridLines: const MajorGridLines(color: AppColors.gridLine, width: 0.5),
@@ -745,13 +845,17 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
                       if (chartProvider.rulerStartPrice != null &&
                           chartProvider.rulerEndPrice != null &&
                           chartProvider.rulerStartTime != null &&
-                          chartProvider.rulerEndTime != null)
+                          chartProvider.rulerEndTime != null &&
+                          _getRulerMidpointDate(chartProvider, chartData) != null)
                         CartesianChartAnnotation(
                           widget: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
-                              color: (chartProvider.rulerEndPrice! >= chartProvider.rulerStartPrice! ? AppColors.bull : AppColors.bear).withValues(alpha: 0.85),
+                              color: (chartProvider.rulerEndPrice! >= chartProvider.rulerStartPrice! ? AppColors.bull : AppColors.bear).withValues(alpha: 0.9),
                               borderRadius: BorderRadius.circular(6),
+                              boxShadow: const [
+                                BoxShadow(color: Colors.black45, blurRadius: 4, offset: Offset(0, 2)),
+                              ],
                             ),
                             child: Text(
                               '${chartProvider.rulerEndPrice! >= chartProvider.rulerStartPrice! ? '+' : ''}${(((chartProvider.rulerEndPrice! - chartProvider.rulerStartPrice!) / chartProvider.rulerStartPrice!) * 100).toStringAsFixed(2)}%',
@@ -759,9 +863,7 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
                             ),
                           ),
                           coordinateUnit: CoordinateUnit.point,
-                          x: DateTime.fromMillisecondsSinceEpoch(
-                            ((chartProvider.rulerStartTime!.millisecondsSinceEpoch + chartProvider.rulerEndTime!.millisecondsSinceEpoch) / 2).toInt(),
-                          ),
+                          x: _getRulerMidpointDate(chartProvider, chartData),
                           y: (chartProvider.rulerStartPrice! + chartProvider.rulerEndPrice!) / 2,
                           horizontalAlignment: ChartAlignment.center,
                           verticalAlignment: ChartAlignment.center,
@@ -814,6 +916,7 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
                 ChartActiveToolChip(
                   activeTool: chartProvider.activeTool,
                   hasRulerStart: chartProvider.rulerStartPrice != null,
+                  rulerPercent: chartProvider.rulerPercent,
                 ),
               ],
             ),
