@@ -1,165 +1,134 @@
-# CryptoView Data Engine & Central API
+# CryptoView Data Engine & Central API 🚀
 
-Backend de ingestión 24/7 y almacén histórico de series temporales financieras sobre **PostgreSQL 17 + TimescaleDB** con API privada en **FastAPI**.
-
----
-
-## 🔐 Seguridad y Arquitectura Dinámica
-
-1. **Claves de Exchange en Base de Datos Cifradas (AES-256)**:
-   - Ya no necesitas editar `.env` ni reiniciar contenedores cuando quieras agregar o rotar API Keys de Binance, KuCoin, etc.
-   - Las claves se envían a través de la API privada y se guardan cifradas en la tabla `api_keys` con la clave maestra `ENCRYPTION_KEY`.
-   - Por seguridad, los endpoints de la API **nunca** exponen secretos en texto plano (se muestran enmascarados como `kuco...1234`).
-2. **Símbolos Dinámicos**:
-   - Los pares a monitorear se almacenan en `tracked_symbols` y se sincronizan en caliente sin reiniciar el worker.
-3. **Autenticación Unificada**:
-   - Todas las llamadas de administración (gestionar claves, añadir monedas, registrar operaciones) requieren la cabecera HTTP `X-API-Key: <TU_API_SECRET_TOKEN>`.
+Backend de ingestión 24/7 y almacén histórico de series temporales financieras sobre **PostgreSQL 17 + TimescaleDB** con API privada en **FastAPI** y proxy inverso **Caddy (HTTPS)**.
 
 ---
 
-## 📍 Datos Exactos del Servidor de Producción (Oracle Cloud)
+## 🔐 Seguridad y Arquitectura
+
+1. **Proxy Inverso Seguro (Caddy + HTTPS Automático)**:
+   - Todo el tráfico externo viaja cifrado mediante TLS con certificado oficial de Let's Encrypt en `https://129-146-110-196.sslip.io`.
+   - El puerto interno de la API (`8000`) está enlazado estrictamente a `127.0.0.1:8000`, impidiendo cualquier acceso no cifrado o directo desde Internet.
+   - Cabeceras de seguridad activadas: HSTS, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`.
+   - Límite de carga de peticiones fijado en 50MB para respaldos.
+
+2. **Mitigación contra Fuerza Bruta & Rate Limiting (`auth.py`)**:
+   - **Comparación en Tiempo Constante**: Se emplea `secrets.compare_digest` para validar `X-API-Key` y prevenir ataques de temporización (timing attacks).
+   - **Bloqueo por Fuerza Bruta**: Si una IP acumula 5 intentos fallidos consecutivos en 60 segundos, queda bloqueada temporalmente durante 5 minutos (`HTTP 429 Too Many Requests`).
+   - **Auto-recuperación**: Si la petición suministra el token maestro de 256 bits legítimo, el bloqueo temporal se levanta automáticamente.
+   - **Límite de Peticiones**: 180 req/minuto por IP para evitar saturación DoS.
+   - **Documentación Pública Oculta**: `docs_url=None` y `openapi_url=None` para evitar escaneos automatizados.
+
+3. **Cifrado Simétrico de Claves de Exchanges (AES-256 / Fernet)**:
+   - Las claves de KuCoin, Binance, etc. se almacenan cifradas en la tabla `api_keys` con la clave maestra `ENCRYPTION_KEY`.
+   - La API nunca devuelve los secretos en texto plano (se retornan enmascarados como `kuco...1234`).
+
+4. **Monitoreo Continuo del Ingestion Worker (Heartbeat)**:
+   - El worker 24/7 actualiza periódicamente la tabla `system_heartbeat` con su estado, monedas activas y backfill pendiente.
+
+---
+
+## 📍 Datos del Servidor de Producción (Oracle Cloud)
 
 * **Proveedor / Región**: Oracle Cloud Infrastructure (`us-phoenix-1`)
-* **Servidor (VM)**: `cryptoview-server` (`ubuntu@cryptoview-server`)
-* **Ruta exacta de despliegue en el servidor**: `/home/ubuntu/backend` (`~/backend`)
-  * Configuración: `/home/ubuntu/backend/.env`
-  * Docker Compose: `/home/ubuntu/backend/docker-compose.yml`
-  * SQL Init: `/home/ubuntu/backend/sql/01_init.sql`
-  * Código fuente: `/home/ubuntu/backend/app/`
-* **Ruta local en PC (Windows)**: `d:\Proyectos\Mios\CryptoView\backend`
-* **Contenedores activos**:
-  * `cryptoview-timescaledb` (`127.0.0.1:5432->5432`)
-  * `cryptoview-api` (`0.0.0.0:8000->8000`)
-  * `cryptoview-worker` (daemon 24/7)
-* **Identificadores OCI (OCIDs)**:
-  * **Instance OCID**: `ocid1.instance.oc1.phx.anyhqljrwg5llficuqkptjpizvcb3dtt7rp5f3tegxq6nme3nbqcvgdnkmxq`
-  * **Subnet OCID**: `ocid1.subnet.oc1.phx.aaaaaaaaqiciizmn7bmvf2wooybnll5gyeqttgt3ae7zpwpqxchvl7banocq`
-  * **Security List OCID**: `ocid1.securitylist.oc1.phx.aaaaaaaamlbc7s3qedul2h2qj77tuzzud3qytfrm44ffpxyzhuvw7psq5cja`
+* **Servidor (VM)**: `cryptoview-server` (`ubuntu@129.146.110.196`)
+* **Llave Privada SSH**: `C:\Users\yordany\.ssh\ssh-key-cryptoview-server.key`
+* **URL Oficial de la API**: `https://129-146-110-196.sslip.io`
+* **Ruta de Despliegue en el Servidor**: `/home/ubuntu/backend` (`~/backend`)
+* **Contenedores Activos**:
+  * `cryptoview-caddy`: Proxy inverso HTTPS (`80:80`, `443:443`).
+  * `cryptoview-api`: FastAPI / Uvicorn (`127.0.0.1:8000->8000`).
+  * `cryptoview-worker`: Demonio recolector continuo 24/7.
+  * `cryptoview-timescaledb`: TimescaleDB / PostgreSQL 17 (`127.0.0.1:5432->5432`).
 
-### ⚡ Comando directo para actualizar archivos desde Windows (sin duplicar carpetas):
+---
+
+## ⚡ Comandos de Mantenimiento
+
+### Actualizar código desde Windows:
 ```powershell
-scp -r d:\Proyectos\Mios\CryptoView\backend\* d:\Proyectos\Mios\CryptoView\backend\.env ubuntu@TU_IP:/home/ubuntu/backend/
+scp -i "C:\Users\yordany\.ssh\ssh-key-cryptoview-server.key" -r backend/app backend/Caddyfile backend/sql ubuntu@129.146.110.196:/home/ubuntu/backend/
 ```
 
-### ⚡ Comando directo en el servidor para aplicar cambios:
+### Reconstruir y reiniciar servicios en el servidor:
 ```bash
-cd /home/ubuntu/backend && docker compose up -d --build
+ssh -i "C:\Users\yordany\.ssh\ssh-key-cryptoview-server.key" ubuntu@129.146.110.196 "cd /home/ubuntu/backend && docker compose build api worker && docker compose up -d api worker && docker exec cryptoview-caddy caddy reload --config /etc/caddy/Caddyfile"
 ```
 
----
-
-## 🚀 Despliegue Inicial desde Cero (Referencia)
-
-### 1. Instalar Docker y Docker Compose en la máquina virtual
-Conéctate por SSH a tu VM de Oracle Cloud y ejecuta:
+### Ver logs en vivo:
 ```bash
-sudo apt update && sudo apt upgrade -y
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER
-```
-*(Cierra y vuelve a abrir tu sesión SSH para aplicar los permisos de Docker)*.
+# Ingestion Worker (recolección de velas y backfill)
+docker logs -f cryptoview-worker
 
----
+# Servidor API
+docker logs -f cryptoview-api
 
-### 2. Clonar o subir la carpeta `backend` a tu servidor
-En tu servidor:
-```bash
-git clone <tu-repositorio>
-cd CryptoView/backend
-```
-*(O copia directamente la carpeta `backend` mediante SCP / SFTP)*.
-
----
-
-### 3. Configurar variables de entorno y levantar el stack
-```bash
-cp .env.example .env
-# Opcional: edita tu API_SECRET_TOKEN y ENCRYPTION_KEY en .env con nano
-nano .env
-
-# Iniciar los servicios
-docker compose up -d --build
+# Proxy Caddy (tráfico y certificados SSL)
+docker logs -f cryptoview-caddy
 ```
 
 ---
 
-## 🔍 Comandos útiles de gestión
+## 📡 Referencia de Endpoints Principales
 
-* **Ver estado de los contenedores**:
-  ```bash
-  docker compose ps
-  ```
-* **Ver logs del colector 24/7 en tiempo real**:
-  ```bash
-  docker compose logs -f worker
-  ```
-* **Ver logs de la API**:
-  ```bash
-  docker compose logs -f api
-  ```
-* **Reiniciar todo**:
-  ```bash
-  docker compose restart
-  ```
+> **Nota**: Todas las peticiones deben incluir la cabecera:  
+> `X-API-Key: <API_SECRET_TOKEN>`
 
----
-
-* **URL Base Segura (HTTPS)**: `https://129-146-110-196.sslip.io`
-* **Diagnóstico / Salud**: `GET /api/v1/health` (`https://129-146-110-196.sslip.io/api/v1/health`)
-* **Documentación Interactiva (Swagger UI)**: `https://129-146-110-196.sslip.io/docs`
-
-### 🔑 Gestión de API Keys de Exchanges (`X-API-Key` requerido)
-
-* **Listar exchanges configurados** (claves enmascaradas):
-  ```bash
-  curl -H "X-API-Key: cryptoview_secret_token_seguro_2026" \
-       https://129-146-110-196.sslip.io/api/v1/keys
+### 1. Diagnóstico y Salud del Sistema
+* **`GET /api/v1/health`**:
+  Devuelve el estado general del backend, conexión a base de datos, total de velas, símbolos en seguimiento y el estado en vivo del Ingestion Worker.
+  ```json
+  {
+    "status": "online",
+    "database": "connected (TimescaleDB / PostgreSQL 17)",
+    "worker_status": "online",
+    "worker_last_seen_seconds": 6.9,
+    "worker_details": {
+      "timestamp_utc": "2026-10-17T21:03:20Z",
+      "active_symbols": 1,
+      "pending_backfill": 1
+    },
+    "tracked_symbols_active": 1,
+    "total_candles_stored": 4331482,
+    "total_trades_stored": 0
+  }
   ```
 
-* **Guardar / Actualizar credenciales (se cifran automáticamente con AES-256)**:
-  ```bash
-  curl -X POST http://TU_IP:8000/api/v1/keys \
-       -H "Content-Type: application/json" \
-       -H "X-API-Key: cryptoview_secret_token_seguro_2026" \
-       -d '{
-         "exchange": "kucoin",
-         "api_key": "tu_api_key_aqui",
-         "api_secret": "tu_api_secret_aqui",
-         "api_passphrase": "tu_passphrase_aqui",
-         "is_active": true
-       }'
-  ```
+### 2. Velas y Precios de Mercado
+* **`GET /api/v1/candles`**:
+  Obtiene velas en orden cronológico ascendente. Cuenta con **enrutamiento jerárquico optimizado**:
+  - `1m`, `3m`, `5m`: consulta la Hypertable `market_candles` o `candles_5m`.
+  - `15m`, `30m`: consulta la Continuous Aggregate `candles_5m` (5x más rápido).
+  - `1h`, `2h`, `4h`, `6h`, `12h`, `1d`, `1w`: consulta `candles_1h` (hasta 60x más rápido).
+  *Parámetros:* `exchange`, `symbol`, `interval`, `limit`, `auto_track`, `end_time`.
+* **`GET /api/v1/candles/tickers`**:
+  Devuelve los últimos precios de mercado (`last_price`, `time`) de todos los pares en seguimiento.
 
-* **Probar conexión con un exchange**:
-  ```bash
-  curl -X POST http://TU_IP:8000/api/v1/keys/kucoin/test \
-       -H "X-API-Key: cryptoview_secret_token_seguro_2026"
-  ```
+### 3. Sincronización y Registro de Operaciones (Trades)
+* **`POST /api/v1/trades/sync`**:
+  Sincroniza órdenes directamente en el servidor conectándose al exchange con las credenciales descifradas (sin enviar secretos al cliente).
+  *Parámetros:* `exchange`, `symbol` (opcional), `days` (por defecto 1).
+* **`POST /api/v1/trades/batch`**:
+  Inserta lotes de transacciones masivas saltando duplicados existentes (`ON CONFLICT (exchange, trade_id) DO NOTHING`).
+* **`GET /api/v1/trades`**:
+  Consulta el historial de órdenes guardadas en la base de datos central.
+* **`PUT /api/v1/trades/{trade_id}` & `DELETE /api/v1/trades/{trade_id}`**:
+  Edición de notas/remanente y borrado de operaciones.
 
-* **Desactivar o eliminar credenciales**:
-  ```bash
-  curl -X DELETE "http://TU_IP:8000/api/v1/keys/kucoin?hard_delete=false" \
-       -H "X-API-Key: cryptoview_secret_token_seguro_2026"
-  ```
+### 4. Retiros y Casamientos
+* **`POST /api/v1/withdrawals/sync`**:
+  Descarga y almacena retiros/gastos del exchange en la tabla `account_withdrawals`.
+* **`GET /api/v1/matches`**:
+  Consulta los casamientos de compra/venta y cálculo de ganancias cerradas.
 
----
+### 5. Respaldo Integral y Restauración
+* **`GET /api/v1/backup/export`**:
+  Genera un volcado completo de la base de datos (con o sin velas) en formato `.json` o comprimido `.json.gz`.
+* **`POST /api/v1/backup/restore`**:
+  Restaura atómicamente tablas de transacciones, retiros, casamientos, claves y símbolos a partir de un archivo `.json.gz`.
 
-### 📊 Datos y Monedas
-
-* **Velas históricas**:
-  ```bash
-  curl "http://TU_IP:8000/api/v1/candles?exchange=kucoin&symbol=BTC/USDT&interval=1h&limit=500"
-  ```
-
-* **Listar monedas en seguimiento**:
-  ```bash
-  curl http://TU_IP:8000/api/v1/symbols
-  ```
-
-* **Agregar nueva moneda al monitoreo 24/7**:
-  ```bash
-  curl -X POST http://TU_IP:8000/api/v1/symbols \
-       -H "Content-Type: application/json" \
-       -H "X-API-Key: cryptoview_secret_token_seguro_2026" \
-       -d '{"exchange": "binance", "symbol": "ETH/USDT"}'
-  ```
+### 6. Gestión de Credenciales y Monedas
+* **`GET /api/v1/keys`**, **`POST /api/v1/keys`**, **`DELETE /api/v1/keys/{exchange}`**:
+  Gestión segura de credenciales de exchanges cifradas con AES-256.
+* **`GET /api/v1/symbols`**, **`POST /api/v1/symbols`**, **`DELETE /api/v1/symbols`**:
+  Administración dinámica de monedas en seguimiento 24/7.

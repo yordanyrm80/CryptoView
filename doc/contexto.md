@@ -130,26 +130,34 @@ lib/
 * **Proveedor Cloud y Región**: Oracle Cloud Infrastructure (OCI) — `us-phoenix-1` (Always Free ARM64, 1 OCPU, 6 GB RAM)
 * **IP Pública y Host SSH**: `ubuntu@129.146.110.196` (`cryptoview-server`)
 * **Llave Privada SSH en PC**: `C:\Users\yordany\.ssh\ssh-key-cryptoview-server.key`
-* **URL Base de la API**: `http://129.146.110.196:8000` (Swagger Docs: `http://129.146.110.196:8000/docs`)
+* **URL Base de la API (HTTPS Let's Encrypt)**: `https://129-146-110-196.sslip.io`
 * **Ruta Exacta de Despliegue en el Servidor**: `/home/ubuntu/backend` (`~/backend`)
   * Variables de entorno (producción): `/home/ubuntu/backend/.env`
   * Orquestación Docker: `/home/ubuntu/backend/docker-compose.yml`
+  * Caddyfile (Proxy Inverso SSL): `/home/ubuntu/backend/Caddyfile`
   * Dockerfile: `/home/ubuntu/backend/Dockerfile`
-  * Inicialización SQL y Vistas Continuas: `/home/ubuntu/backend/sql/01_init.sql`
+  * Inicialización SQL, Vistas y Tablas Heartbeat: `/home/ubuntu/backend/sql/01_init.sql`
   * Aplicación FastAPI y Worker: `/home/ubuntu/backend/app/`
 * **Ruta Exacta Local en PC (Windows)**: `d:\Proyectos\Mios\CryptoView\backend`
 
 ### 🐳 Contenedores y Servicios Activos en el Servidor
-1. **`cryptoview-timescaledb`** (`timescale/timescaledb-ha:pg17`):
-   * Puerto interno: `127.0.0.1:5432->5432/tcp`
-   * Volumen persistente de Docker: `pgdata` (`/home/postgres/pgdata/data`)
-   * Modelo de datos: Ingestión pura de velas de **1 minuto (`1m`)** en Hypertable `market_candles` (en UTC) y cálculo automático de temporalidades superiores (`candles_5m`, `candles_1h`, `candles_1d` y `time_bucket` al vuelo).
-   * Seguridad de claves: Tabla `api_keys` con cifrado simétrico AES-256 / Fernet derivado por SHA-256 desde `ENCRYPTION_KEY`.
+1. **`cryptoview-caddy`** (`caddy:2-alpine`):
+   - Puertos públicos: `80:80`, `443:443` (abiertos en OCI Security List + `iptables`).
+   - Gestión automática de certificados TLS/SSL mediante Let's Encrypt.
+   - Cabeceras de seguridad HSTS, reenvío de IP real y límite de payload a 50MB.
 2. **`cryptoview-api`** (`backend-api` - FastAPI / Uvicorn):
-   * Puerto público expuesto: `0.0.0.0:8000->8000/tcp` (abierto en OCI Security List + Ubuntu `iptables`)
-   * Autenticación mediante cabecera HTTP `X-API-Key`.
+   - Enlace interno restringido: `127.0.0.1:8000->8000/tcp` (sin acceso público directo).
+   - Autenticación global por cabecera `X-API-Key` con comparación en tiempo constante (`secrets.compare_digest`).
+   - Mitigación por fuerza bruta: bloqueo de IP de 5 min tras 5 fallos en 60s (auto-recuperable al presentar clave válida). Rate limit de 180 req/min.
 3. **`cryptoview-worker`** (`backend-worker`):
-   * Demonio recolector 24/7 (`python -m app.services.collector`) que sincroniza dinámicamente los pares activos en `tracked_symbols` y descifra credenciales desde `api_keys` en caliente sin reiniciar contenedores.
+   - Demonio recolector 24/7 (`python -m app.services.collector`).
+   - Tiempo real hacia adelante, backfill progresivo hacia el pasado (round-robin) y auto-sync de trades cada 10 min.
+   - Registro de latido continuo en la tabla `system_heartbeat`.
+4. **`cryptoview-timescaledb`** (`timescale/timescaledb-ha:pg17`):
+   - Puerto interno: `127.0.0.1:5432->5432/tcp`.
+   - Volumen persistente: `pgdata`.
+   - Hypertable `market_candles` (1m) y Continuous Aggregates (`candles_5m`, `candles_1h`).
+   - Tabla `api_keys` con cifrado simétrico AES-256 (Fernet).
 
 ### 🔑 Identificadores OCI (OCIDs de Red e Instancia)
 * **Tenancy OCID**: `ocid1.tenancy.oc1..aaaaaaaa7k7vtr66pw3uibegppfnvzxja3jk64fzzuku4vpiuwxkzxpx37ea`
@@ -159,20 +167,18 @@ lib/
 * **Security List OCID**: `ocid1.securitylist.oc1.phx.aaaaaaaamlbc7s3qedul2h2qj77tuzzud3qytfrm44ffpxyzhuvw7psq5cja`
 
 ### ⚡ Comandos Directos de Despliegue y Mantenimiento
-* **Subir cambios desde Windows al servidor (sin anidar carpetas)**:
+* **Subir cambios desde Windows al servidor**:
   ```powershell
-  scp -r d:\Proyectos\Mios\CryptoView\backend\* ubuntu@<IP_SERVIDOR>:/home/ubuntu/backend/
+  scp -i "C:\Users\yordany\.ssh\ssh-key-cryptoview-server.key" -r backend/app backend/Caddyfile backend/sql ubuntu@129.146.110.196:/home/ubuntu/backend/
   ```
 * **Reconstruir y levantar servicios en el servidor**:
   ```bash
-  cd /home/ubuntu/backend && docker compose up -d --build
+  ssh -i "C:\Users\yordany\.ssh\ssh-key-cryptoview-server.key" ubuntu@129.146.110.196 "cd /home/ubuntu/backend && docker compose build api worker && docker compose up -d api worker && docker exec cryptoview-caddy caddy reload --config /etc/caddy/Caddyfile"
   ```
-* **Reiniciar base de datos desde cero (aplicar nuevo `01_init.sql`)**:
-  ```bash
-  cd /home/ubuntu/backend && docker compose down -v && docker compose up -d --build
-  ```
-* **Ver logs en vivo del colector**:
+* **Ver logs en vivo**:
   ```bash
   docker logs -f cryptoview-worker
+  docker logs -f cryptoview-api
+  docker logs -f cryptoview-caddy
   ```
 
