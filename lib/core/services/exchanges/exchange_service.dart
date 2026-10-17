@@ -13,16 +13,26 @@ class ExchangeService {
   final BingxService _bingx = BingxService.instance;
 
   /// Fetch K-lines / candlesticks from Central Cloud Data Engine first, with automatic fallback to direct exchange API
-  Future<List<Map<String, dynamic>>> fetchKlines(String exchange, String symbol, String interval, {int limit = 500}) async {
+  Future<List<Map<String, dynamic>>> fetchKlines(
+    String exchange,
+    String symbol,
+    String interval, {
+    int limit = 500,
+    int? endTimeSec,
+  }) async {
     final cloudCandles = await CloudApiService.instance.fetchCandles(
       exchange,
       symbol,
       interval,
       limit: limit < 1500 ? 1500 : limit,
       autoTrack: false,
+      endTimeSec: endTimeSec,
     );
     if (cloudCandles.isNotEmpty) {
       return cloudCandles;
+    }
+    if (endTimeSec != null) {
+      return [];
     }
 
     final ex = exchange.toLowerCase();

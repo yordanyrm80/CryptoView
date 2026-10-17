@@ -23,6 +23,7 @@ class CloudApiService {
     String interval, {
     int limit = 1500,
     bool autoTrack = false,
+    int? endTimeSec,
   }) async {
     try {
       final ex = exchange.trim().toLowerCase();
@@ -30,11 +31,14 @@ class CloudApiService {
       final tf = interval.trim().toLowerCase();
       final safeLimit = limit.clamp(1, 2000);
 
-      final uri = Uri.parse(
-        '$baseUrl/api/v1/candles?exchange=$ex&symbol=$sym&interval=$tf&limit=$safeLimit&auto_track=$autoTrack',
-      );
+      String url = '$baseUrl/api/v1/candles?exchange=$ex&symbol=$sym&interval=$tf&limit=$safeLimit&auto_track=$autoTrack';
+      if (endTimeSec != null) {
+        final endIso = DateTime.fromMillisecondsSinceEpoch(endTimeSec * 1000, isUtc: true).toIso8601String();
+        url += '&end_time=${Uri.encodeComponent(endIso)}';
+      }
+      final uri = Uri.parse(url);
 
-      final response = await http.get(uri).timeout(const Duration(seconds: 6));
+      final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 6));
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
         if (data.isEmpty) return [];

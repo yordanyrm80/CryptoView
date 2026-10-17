@@ -13,7 +13,7 @@ class TrackerProvider extends ChangeNotifier {
   List<MatchModel> _matches = [];
   List<WithdrawalModel> _withdrawals = [];
   Map<String, double> _exchangeBalances = {};
-  Map<String, double> _defaultBuyAmounts = {'KuCoin': 400.0, 'Binance': 400.0, 'Bybit': 400.0};
+  Map<String, double> _defaultBuyAmounts = {'KuCoin': 400.0, 'Binance': 400.0, 'BingX': 400.0};
   bool _isLoading = false;
   bool _isFetchingBalance = false;
 
@@ -203,7 +203,7 @@ class TrackerProvider extends ChangeNotifier {
       final wData = await DatabaseHelper.instance.queryAllWithdrawals();
       _withdrawals = wData.map((map) => WithdrawalModel.fromMap(map)).toList();
 
-      final exchanges = ['KuCoin', 'Binance', 'Bybit', 'OKX', 'Gate.io', 'MEXC', 'Coinbase'];
+      final exchanges = ['KuCoin', 'Binance', 'BingX'];
       for (var ex in exchanges) {
         _defaultBuyAmounts[ex] = await DatabaseHelper.instance.getDefaultBuyAmount(ex);
       }

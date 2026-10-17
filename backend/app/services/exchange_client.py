@@ -208,10 +208,67 @@ class ExchangeClient:
                 print(f"[KuCoin Backfill Error] {symbol}: {e}")
                 return [], False
 
-        # Fallback genérico para otros exchanges
+        if ex_name == 'binance':
+            binance_sym = norm_symbol.replace('/', '')
+            end_time_ms = (before_timestamp_sec * 1000) - 1000
+            try:
+                resp = await self._http_client.get(
+                    'https://data-api.binance.vision/api/v3/klines',
+                    params={
+                        'symbol': binance_sym,
+                        'interval': '1m',
+                        'endTime': end_time_ms,
+                        'limit': min(limit, 1000),
+                    },
+                )
+                if resp.status_code == 429:
+                    print("[RateLimit Binance] HTTP 429 en backfill. Pausando 60s...")
+                    await asyncio.sleep(60)
+                    return [], False
+                resp.raise_for_status()
+                raw_list = resp.json()
+                if not raw_list:
+                    # Confirmado con 200 OK: ya no existen velas anteriores en Binance
+                    return [], True
+
+                candles = []
+                for c in raw_list:
+                    ts_sec = int(c[0] // 1000)
+                    if ts_sec < before_timestamp_sec:
+                        candles.append({
+                            'time': datetime.fromtimestamp(ts_sec, tz=timezone.utc),
+                            'open': float(c[1]),
+                            'high': float(c[2]),
+                            'low': float(c[3]),
+                            'close': float(c[4]),
+                            'volume': float(c[5]) if len(c) > 5 else 0.0,
+                        })
+                candles.sort(key=lambda x: x['time'])
+                return candles, False
+            except Exception as e:
+                print(f"[Binance Backfill Error] {symbol}: {e}")
+                return [], False
+
+        # Soporte para BingX y otros exchanges vía CCXT
         since_ms = (before_timestamp_sec - (limit * 60)) * 1000
         candles = await self.fetch_ohlcv(ex_name, norm_symbol, timeframe='1m', since=since_ms, limit=limit)
         filtered = [c for c in candles if int(c['time'].timestamp()) < before_timestamp_sec]
+        if not filtered:
+            ex = await self.get_exchange(ex_name)
+            if ex:
+                try:
+                    await asyncio.sleep(2.0)
+                    check_raw = await ex.fetch_ohlcv(
+                        norm_symbol,
+                        timeframe='1m',
+                        limit=10,
+                        params={'endTime': (before_timestamp_sec - 60) * 1000}
+                    )
+                    check_filtered = [c for c in (check_raw or []) if int(c[0] // 1000) < before_timestamp_sec]
+                    if not check_filtered:
+                        return [], True
+                except Exception:
+                    return [], False
         return filtered, False
 
     async def close(self):

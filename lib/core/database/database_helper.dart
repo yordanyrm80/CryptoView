@@ -296,18 +296,30 @@ class DatabaseHelper {
     required String symbol,
     required String interval,
     int limit = 1500,
+    int? beforeTimeSec,
   }) async {
     final db = await instance.database;
     final ex = exchange.toLowerCase();
     final sym = symbol.toUpperCase();
 
-    final result = await db.rawQuery('''
-      SELECT time, open, high, low, close, volume
-      FROM candles
-      WHERE exchange = ? AND symbol = ? AND interval = ?
-      ORDER BY time DESC
-      LIMIT ?
-    ''', [ex, sym, interval, limit]);
+    final List<Map<String, Object?>> result;
+    if (beforeTimeSec != null) {
+      result = await db.rawQuery('''
+        SELECT time, open, high, low, close, volume
+        FROM candles
+        WHERE exchange = ? AND symbol = ? AND interval = ? AND time <= ?
+        ORDER BY time DESC
+        LIMIT ?
+      ''', [ex, sym, interval, beforeTimeSec, limit]);
+    } else {
+      result = await db.rawQuery('''
+        SELECT time, open, high, low, close, volume
+        FROM candles
+        WHERE exchange = ? AND symbol = ? AND interval = ?
+        ORDER BY time DESC
+        LIMIT ?
+      ''', [ex, sym, interval, limit]);
+    }
 
     if (result.isEmpty) return [];
 
@@ -735,6 +747,92 @@ class DatabaseHelper {
 
     // 4. Reopen database connection
     _database = await _initDB('cryptoview.db');
+  }
+
+  /// Exporta todas las tablas de trabajo del usuario en SQLite (compras/ventas, casamientos,
+  /// gastos/retiros, dibujos del gráfico, favoritas, ajustes y llaves) en un mapa serializable a JSON.
+  Future<Map<String, dynamic>> exportAllLocalTables() async {
+    final db = await database;
+    return {
+      'transactions': await db.query('transactions', orderBy: 'id ASC'),
+      'matches': await db.query('matches', orderBy: 'id ASC'),
+      'withdrawals': await db.query('withdrawals', orderBy: 'id ASC'),
+      'drawings': await db.query('drawings', orderBy: 'id ASC'),
+      'favorites': await db.query('favorites'),
+      'exchange_settings': await db.query('exchange_settings'),
+      'general_settings': await db.query('general_settings'),
+      'api_sync': await db.query('api_sync'),
+      'api_keys': await db.query('api_keys'),
+    };
+  }
+
+  /// Restaura todas las tablas locales de SQLite desde un mapa JSON exportado previamente,
+  /// preservando los IDs originales para mantener intactos todos los casamientos (matches).
+  Future<void> restoreAllLocalTables(Map<String, dynamic> localData) async {
+    if (localData.isEmpty) return;
+
+    // 1. Copia preventiva del archivo .db actual antes de restaurar
+    final dbPath = await getDatabasePath();
+    final dbFile = File(dbPath);
+    if (await dbFile.exists()) {
+      final backupDirPath = await getBackupsDirectoryPath();
+      final preRestoreName = 'cryptoview_pre_restore_${DateTime.now().millisecondsSinceEpoch}.db';
+      try {
+        await dbFile.copy(join(backupDirPath, preRestoreName));
+      } catch (_) {}
+    }
+
+    final db = await database;
+    await db.transaction((txn) async {
+      Future<void> restoreTable(String tableName, List<dynamic>? rows, {bool clearExisting = true}) async {
+        if (rows == null) return;
+        if (clearExisting) {
+          await txn.delete(tableName);
+        }
+        for (final rawRow in rows) {
+          if (rawRow is Map) {
+            final row = Map<String, dynamic>.from(rawRow);
+            await txn.insert(
+              tableName,
+              row,
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+          }
+        }
+      }
+
+      // Restaurar en orden de integridad referencial
+      if (localData.containsKey('transactions')) {
+        await restoreTable('transactions', localData['transactions'] as List<dynamic>?);
+      }
+      if (localData.containsKey('withdrawals')) {
+        await restoreTable('withdrawals', localData['withdrawals'] as List<dynamic>?);
+      }
+      if (localData.containsKey('matches')) {
+        await restoreTable('matches', localData['matches'] as List<dynamic>?);
+      }
+      if (localData.containsKey('drawings')) {
+        await restoreTable('drawings', localData['drawings'] as List<dynamic>?);
+      }
+      if (localData.containsKey('favorites')) {
+        await restoreTable('favorites', localData['favorites'] as List<dynamic>?);
+      }
+      if (localData.containsKey('exchange_settings')) {
+        await restoreTable('exchange_settings', localData['exchange_settings'] as List<dynamic>?, clearExisting: false);
+      }
+      if (localData.containsKey('general_settings')) {
+        await restoreTable('general_settings', localData['general_settings'] as List<dynamic>?, clearExisting: false);
+      }
+      if (localData.containsKey('api_sync')) {
+        await restoreTable('api_sync', localData['api_sync'] as List<dynamic>?, clearExisting: false);
+      }
+      if (localData.containsKey('api_keys')) {
+        final keysList = localData['api_keys'] as List<dynamic>?;
+        if (keysList != null && keysList.isNotEmpty) {
+          await restoreTable('api_keys', keysList, clearExisting: false);
+        }
+      }
+    });
   }
 
   Future<void> deleteBackup(String backupFilePath) async {

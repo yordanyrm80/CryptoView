@@ -27,7 +27,7 @@ async def export_database_backup(
 ):
     """
     Genera una salva completa de las tablas del servidor (símbolos, API keys cifradas, trades, retiros, casamientos
-    y opcionalmente todas las velas históricas).
+    y opcionalmente todas las velas históricas) para descargarla a la PC del usuario.
     """
     pool = await get_db_pool()
     now_utc = datetime.now(timezone.utc)
@@ -57,7 +57,7 @@ async def export_database_backup(
             ]
 
     backup_payload = {
-        "version": "1.0",
+        "version": "2.0",
         "exported_at_utc": now_utc.isoformat(),
         "include_candles": include_candles,
         "counts": {
@@ -179,7 +179,21 @@ async def restore_database_backup(request: Request):
                 """, w["exchange"], w["currency"], float(w["amount"]), float(w.get("fee", 0.0)), w_time, w.get("category", "Gasto Personal"), w.get("description"), w.get("tx_id"), w.get("is_matched", False))
             restored_counts["account_withdrawals"] = len(withdrawals)
 
-            # 5. Market Candles (opcional)
+            # 5. Trade Matches
+            matches = data.get("trade_matches", [])
+            for m in matches:
+                m_time = datetime.fromisoformat(m["time"])
+                await conn.execute("""
+                    INSERT INTO trade_matches (id, buy_trade_id, sell_trade_id, withdrawal_id, match_type, matched_amount, profit, time, notes)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    ON CONFLICT (id) DO UPDATE SET
+                        matched_amount = EXCLUDED.matched_amount,
+                        profit = EXCLUDED.profit,
+                        notes = EXCLUDED.notes;
+                """, int(m["id"]), m.get("buy_trade_id"), m.get("sell_trade_id"), m.get("withdrawal_id"), m.get("match_type", "trade"), float(m["matched_amount"]), float(m.get("profit", 0.0)), m_time, m.get("notes", ""))
+            restored_counts["trade_matches"] = len(matches)
+
+            # 6. Market Candles (opcional)
             candles = data.get("market_candles", [])
             if candles:
                 records = [
@@ -196,5 +210,6 @@ async def restore_database_backup(request: Request):
     return {
         "status": "ok",
         "message": "Respaldo restaurado exitosamente en la base de datos.",
-        "restored_counts": restored_counts
+        "restored_counts": restored_counts,
     }
+

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -183,6 +184,7 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
 
     try {
+      // 1. Descargar los datos del Servidor Cloud hacia tu PC
       final uri = Uri.parse(
         '$_cloudApiUrl/api/v1/backup/export?include_candles=$includeCandles&compressed=true',
       );
@@ -195,6 +197,27 @@ class SettingsProvider with ChangeNotifier {
         throw Exception('HTTP ${response.statusCode}: ${response.body}');
       }
 
+      // 2. Leer también todas las tablas locales de SQLite en tu PC y unirlas en el mismo archivo local .json.gz
+      final localSqlite = await DatabaseHelper.instance.exportAllLocalTables();
+      List<int> finalGzBytes = response.bodyBytes;
+      try {
+        final rawBytes = response.bodyBytes;
+        final decompressed = (rawBytes.length >= 2 && rawBytes[0] == 0x1F && rawBytes[1] == 0x8B)
+            ? gzip.decode(rawBytes)
+            : rawBytes;
+        final payload = jsonDecode(utf8.decode(decompressed)) as Map<String, dynamic>;
+        final data = (payload['data'] as Map<String, dynamic>?) ?? <String, dynamic>{};
+        data['local_sqlite'] = localSqlite;
+        payload['data'] = data;
+        final counts = (payload['counts'] as Map<String, dynamic>?) ?? <String, dynamic>{};
+        counts['local_transactions'] = (localSqlite['transactions'] as List?)?.length ?? 0;
+        counts['local_matches'] = (localSqlite['matches'] as List?)?.length ?? 0;
+        counts['local_withdrawals'] = (localSqlite['withdrawals'] as List?)?.length ?? 0;
+        counts['local_drawings'] = (localSqlite['drawings'] as List?)?.length ?? 0;
+        payload['counts'] = counts;
+        finalGzBytes = gzip.encode(utf8.encode(jsonEncode(payload)));
+      } catch (_) {}
+
       final backupDirPath = await DatabaseHelper.instance.getBackupsDirectoryPath();
       final now = DateTime.now().toUtc();
       final pad = (int n) => n.toString().padLeft(2, '0');
@@ -202,11 +225,11 @@ class SettingsProvider with ChangeNotifier {
       final filename =
           'cryptoview_cloud_${suffix}_${now.year}-${pad(now.month)}-${pad(now.day)}_${pad(now.hour)}-${pad(now.minute)}-${pad(now.second)}.json.gz';
       final file = File(join(backupDirPath, filename));
-      await file.writeAsBytes(response.bodyBytes, flush: true);
+      await file.writeAsBytes(finalGzBytes, flush: true);
 
       await loadBackups();
       _isBackupBusy = false;
-      _backupMessage = 'Respaldo del Servidor Cloud descargado con éxito.';
+      _backupMessage = 'Salva completa (Local + Servidor Cloud) guardada con éxito.';
       notifyListeners();
       return file.path;
     } catch (e) {
@@ -225,6 +248,23 @@ class SettingsProvider with ChangeNotifier {
     try {
       if (path.endsWith('.json.gz') || path.endsWith('.json')) {
         final bytes = await File(path).readAsBytes();
+
+        // 1. Extraer local_sqlite del archivo de respaldo para restaurar SQLite local
+        Map<String, dynamic> localSqlite = {};
+        try {
+          final decompressed = (bytes.length >= 2 && bytes[0] == 0x1F && bytes[1] == 0x8B)
+              ? gzip.decode(bytes)
+              : bytes;
+          final payload = jsonDecode(utf8.decode(decompressed)) as Map<String, dynamic>;
+          final data = payload['data'] as Map<String, dynamic>?;
+          if (data != null && data['local_sqlite'] is Map) {
+            localSqlite = Map<String, dynamic>.from(data['local_sqlite'] as Map);
+          }
+        } catch (e) {
+          debugPrint('Error leyendo local_sqlite del respaldo: $e');
+        }
+
+        // 2. Restaurar en el Servidor Cloud (PostgreSQL)
         final uri = Uri.parse('$_cloudApiUrl/api/v1/backup/restore');
         final response = await http.post(
           uri,
@@ -238,8 +278,26 @@ class SettingsProvider with ChangeNotifier {
         if (response.statusCode != 200) {
           throw Exception('HTTP ${response.statusCode}: ${response.body}');
         }
+
+        // Si el archivo no traía local_sqlite pero el servidor lo devolvió en la respuesta
+        if (localSqlite.isEmpty) {
+          try {
+            final respJson = jsonDecode(response.body) as Map<String, dynamic>;
+            if (respJson['local_sqlite'] is Map) {
+              localSqlite = Map<String, dynamic>.from(respJson['local_sqlite'] as Map);
+            }
+          } catch (_) {}
+        }
+
+        // 3. Restaurar todas las tablas de SQLite local (compras, ventas, casamientos, Bitrefill, dibujos, favoritas, ajustes)
+        if (localSqlite.isNotEmpty) {
+          await DatabaseHelper.instance.restoreAllLocalTables(localSqlite);
+        }
+
+        await loadSettings();
+        await loadBackups();
         _isBackupBusy = false;
-        _backupMessage = 'Base de datos del Servidor Cloud restaurada correctamente.';
+        _backupMessage = 'Base de datos Local y Servidor Cloud restaurados correctamente.';
         notifyListeners();
         return true;
       }

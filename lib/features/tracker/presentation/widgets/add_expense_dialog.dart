@@ -112,7 +112,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                           fillColor: AppColors.card,
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.border)),
                         ),
-                        items: ['KuCoin', 'Binance', 'Bybit', 'Billetera Externa']
+                        items: ['KuCoin', 'Binance', 'BingX', 'Bitrefill', 'Billetera Externa']
                             .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                             .toList(),
                         onChanged: (v) {

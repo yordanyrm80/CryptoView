@@ -6,6 +6,7 @@ import '../providers/settings_provider.dart';
 import '../../exchanges/presentation/exchanges_screen.dart';
 import '../../tracker/providers/tracker_provider.dart';
 import '../../watchlist/providers/watchlist_provider.dart';
+import '../../chart/providers/chart_provider.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -399,7 +400,7 @@ class SettingsScreen extends StatelessWidget {
                               backgroundColor: path != null ? AppColors.bull : AppColors.bear,
                               content: Text(
                                 path != null
-                                    ? 'Respaldo del Servidor Cloud (.json.gz) descargado a tu PC.'
+                                    ? 'Salva completa (Local + Servidor Cloud .json.gz) guardada en tu PC.'
                                     : (settingsProvider.backupMessage ?? 'Error descargando respaldo cloud.'),
                               ),
                             ),
@@ -408,7 +409,7 @@ class SettingsScreen extends StatelessWidget {
                       },
                 icon: const Icon(Icons.cloud_download_rounded, size: 16),
                 label: const Text(
-                  'Descargar Salva Servidor Cloud',
+                  'Salva Completa Local + Cloud (.json.gz)',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                 ),
               ),
@@ -602,26 +603,32 @@ class SettingsScreen extends StatelessWidget {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
             onPressed: () async {
+              final trackerProvider = Provider.of<TrackerProvider>(context, listen: false);
+              final watchlistProvider = Provider.of<WatchlistProvider>(context, listen: false);
+              final chartProvider = Provider.of<ChartProvider>(context, listen: false);
+              final messenger = ScaffoldMessenger.of(context);
               Navigator.pop(ctx);
               final success = await settingsProvider.restoreBackup(file.path);
-              if (context.mounted) {
-                if (success) {
-                  await Provider.of<TrackerProvider>(context, listen: false).loadData();
-                  await Provider.of<WatchlistProvider>(context, listen: false).reloadWatchlistState();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      backgroundColor: AppColors.bull,
-                      content: Text('¡Base de datos restaurada con éxito! Todos los datos fueron recargados.'),
-                    ),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      backgroundColor: AppColors.bear,
-                      content: Text(settingsProvider.backupMessage ?? 'Error al restaurar.'),
-                    ),
-                  );
-                }
+              if (success) {
+                await trackerProvider.loadData();
+                await watchlistProvider.reloadWatchlistState();
+                await chartProvider.loadChartData(
+                  trackerProvider.activeExchange,
+                  trackerProvider.activeSymbol,
+                );
+                messenger.showSnackBar(
+                  const SnackBar(
+                    backgroundColor: AppColors.bull,
+                    content: Text('¡Base de datos restaurada con éxito! Operaciones, casamientos, gastos y dibujos recargados.'),
+                  ),
+                );
+              } else {
+                messenger.showSnackBar(
+                  SnackBar(
+                    backgroundColor: AppColors.bear,
+                    content: Text(settingsProvider.backupMessage ?? 'Error al restaurar.'),
+                  ),
+                );
               }
             },
             child: const Text('Sí, Restaurar', style: TextStyle(fontWeight: FontWeight.bold)),

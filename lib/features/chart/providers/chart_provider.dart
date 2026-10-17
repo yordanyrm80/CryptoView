@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/database/database_helper.dart';
-import '../../../core/utils/exchange_service.dart';
+import '../../../core/services/exchanges/exchange_service.dart';
 import '../domain/models/chart_candle_model.dart';
 
 class ChartProvider extends ChangeNotifier {
@@ -8,6 +8,8 @@ class ChartProvider extends ChangeNotifier {
   List<ChartData> _chartData = [];
   List<Map<String, dynamic>> _drawings = [];
   bool _isLoading = false;
+  bool _isLoadingMoreHistory = false;
+  bool _hasReachedHistoryEnd = false;
   bool _isDrawingMode = false; // Kept for backwards compatibility
   String _activeInterval = '1h'; // default 1 hour
 
@@ -39,22 +41,116 @@ class ChartProvider extends ChangeNotifier {
   List<ChartData> get chartData => _chartData;
   List<Map<String, dynamic>> get drawings => _drawings;
   bool get isLoading => _isLoading;
+  bool get isLoadingMoreHistory => _isLoadingMoreHistory;
+  bool get hasReachedHistoryEnd => _hasReachedHistoryEnd;
   bool get isDrawingMode => _isDrawingMode;
   String get activeInterval => _activeInterval;
   String get activeTool => _activeTool;
 
+  int _getIntervalSeconds(String interval) {
+    switch (interval.toLowerCase()) {
+      case '1m':
+        return 60;
+      case '3m':
+        return 180;
+      case '5m':
+        return 300;
+      case '15m':
+        return 900;
+      case '30m':
+        return 1800;
+      case '1h':
+        return 3600;
+      case '2h':
+        return 7200;
+      case '4h':
+        return 14400;
+      case '6h':
+        return 21600;
+      case '12h':
+        return 43200;
+      case '1d':
+        return 86400;
+      case '1w':
+        return 604800;
+      default:
+        return 3600;
+    }
+  }
+
   void _rebuildChartData() {
-    _chartData = List<ChartData>.unmodifiable(
-      _candles.map<ChartData>((c) {
-        return ChartData(
-          date: DateTime.fromMillisecondsSinceEpoch((c['time'] as int) * 1000),
-          open: (c['open'] as num).toDouble(),
-          high: (c['high'] as num).toDouble(),
-          low: (c['low'] as num).toDouble(),
-          close: (c['close'] as num).toDouble(),
-        );
-      }),
-    );
+    _chartData = _candles.map<ChartData>((c) {
+      return ChartData(
+        date: DateTime.fromMillisecondsSinceEpoch((c['time'] as int) * 1000),
+        open: (c['open'] as num).toDouble(),
+        high: (c['high'] as num).toDouble(),
+        low: (c['low'] as num).toDouble(),
+        close: (c['close'] as num).toDouble(),
+      );
+    }).toList();
+  }
+
+  /// Actualiza en vivo la última vela con el precio en tiempo real sin reiniciar el gráfico.
+  /// Retorna `1` si se actualizó la última vela existente, `2` si se abrió una nueva vela, o `null` si no hubo cambio.
+  int? updateLivePrice(double livePrice) {
+    if (_candles.isEmpty || _chartData.isEmpty || livePrice <= 0) return null;
+
+    final int intervalSec = _getIntervalSeconds(_activeInterval);
+    final int nowUtcSec = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+    final int lastIdx = _candles.length - 1;
+    final Map<String, dynamic> lastMap = _candles[lastIdx];
+    final int lastTimeSec = (lastMap['time'] as num).toInt();
+
+    if (nowUtcSec < lastTimeSec + intervalSec) {
+      final double oldClose = (lastMap['close'] as num).toDouble();
+      if ((oldClose - livePrice).abs() < 1e-10) return null;
+
+      final double open = (lastMap['open'] as num).toDouble();
+      final double oldHigh = (lastMap['high'] as num).toDouble();
+      final double oldLow = (lastMap['low'] as num).toDouble();
+      final double newHigh = livePrice > oldHigh ? livePrice : oldHigh;
+      final double newLow = livePrice < oldLow ? livePrice : oldLow;
+
+      final updatedMap = Map<String, dynamic>.from(lastMap);
+      updatedMap['high'] = newHigh;
+      updatedMap['low'] = newLow;
+      updatedMap['close'] = livePrice;
+      _candles[lastIdx] = updatedMap;
+
+      _chartData[lastIdx] = ChartData(
+        date: DateTime.fromMillisecondsSinceEpoch(lastTimeSec * 1000),
+        open: open,
+        high: newHigh,
+        low: newLow,
+        close: livePrice,
+      );
+      return 1;
+    } else {
+      final int newBucketSec = (nowUtcSec ~/ intervalSec) * intervalSec;
+      final double prevClose = (lastMap['close'] as num).toDouble();
+      final double newHigh = livePrice > prevClose ? livePrice : prevClose;
+      final double newLow = livePrice < prevClose ? livePrice : prevClose;
+
+      _candles.add({
+        'time': newBucketSec,
+        'open': prevClose,
+        'high': newHigh,
+        'low': newLow,
+        'close': livePrice,
+        'volume': 0.0,
+      });
+
+      _chartData.add(
+        ChartData(
+          date: DateTime.fromMillisecondsSinceEpoch(newBucketSec * 1000),
+          open: prevClose,
+          high: newHigh,
+          low: newLow,
+          close: livePrice,
+        ),
+      );
+      return 2;
+    }
   }
 
   // Ruler getters
@@ -166,6 +262,8 @@ class ChartProvider extends ChangeNotifier {
     _rulerEndPrice = null;
     _rulerEndTime = null;
     _rulerPercent = null;
+    _isLoadingMoreHistory = false;
+    _hasReachedHistoryEnd = false;
 
     // 1. Immediately load any previously saved candles from local SQLite
     try {
@@ -230,6 +328,70 @@ class ChartProvider extends ChangeNotifier {
 
     _isLoading = false;
     notifyListeners();
+  }
+
+  /// Carga un bloque adicional de 1,500 velas históricas anteriores a la vela más antigua actual.
+  /// Retorna la cantidad de velas antiguas nuevas agregadas al principio de la serie.
+  Future<int> loadMoreHistory(String exchange, String symbol) async {
+    if (_isLoading || _isLoadingMoreHistory || _hasReachedHistoryEnd || _candles.isEmpty) {
+      return 0;
+    }
+
+    _isLoadingMoreHistory = true;
+
+    try {
+      final int oldestTimeSec = (_candles.first['time'] as num).toInt();
+      final int beforeSec = oldestTimeSec - 1;
+
+      List<Map<String, dynamic>> olderFetched = await ExchangeService.instance.fetchKlines(
+        exchange,
+        symbol,
+        _activeInterval,
+        limit: 1500,
+        endTimeSec: beforeSec,
+      );
+
+      if (olderFetched.isNotEmpty) {
+        await DatabaseHelper.instance.saveCandles(
+          exchange: exchange,
+          symbol: symbol,
+          interval: _activeInterval,
+          candles: olderFetched,
+        );
+      } else {
+        olderFetched = await DatabaseHelper.instance.getCandles(
+          exchange: exchange,
+          symbol: symbol,
+          interval: _activeInterval,
+          limit: 1500,
+          beforeTimeSec: beforeSec,
+        );
+      }
+
+      final existingTimes = _candles.map((c) => (c['time'] as num).toInt()).toSet();
+      final strictlyOlder = olderFetched
+          .where((c) {
+            final t = (c['time'] as num).toInt();
+            return t < oldestTimeSec && !existingTimes.contains(t);
+          })
+          .toList();
+
+      if (strictlyOlder.isEmpty) {
+        _hasReachedHistoryEnd = true;
+        _isLoadingMoreHistory = false;
+        return 0;
+      }
+
+      strictlyOlder.sort((a, b) => (a['time'] as num).toInt().compareTo((b['time'] as num).toInt()));
+      _candles = [...strictlyOlder, ..._candles];
+      _rebuildChartData();
+      _isLoadingMoreHistory = false;
+      return strictlyOlder.length;
+    } catch (e) {
+      debugPrint('Error loading older chart history: $e');
+      _isLoadingMoreHistory = false;
+      return 0;
+    }
   }
 
   // Add drawing to SQLite

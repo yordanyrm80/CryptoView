@@ -34,10 +34,12 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
   late final ZoomPanBehavior _zoomPanBehavior;
   late final ZoomPanBehavior _noPanBehavior;
   ChartSeriesController? _chartSeriesController;
+  DateTimeCategoryAxisController? _xAxisController;
   String? _lastLoadedSymbol;
   String? _lastLoadedExchange;
   String? _lastLoadedInterval;
   bool _hasUserZoomedOrPanned = false;
+  bool _isTriggeringHistoryLoad = false;
   double? _userZoomFactor;
   double? _userZoomPosition;
   String? _draggingLine;
@@ -50,11 +52,62 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
     if (args.axis?.name == 'primaryXAxis') {
       _userZoomFactor = args.currentZoomFactor;
       _userZoomPosition = args.currentZoomPosition;
-      if (!_hasUserZoomedOrPanned) {
+      _hasUserZoomedOrPanned = true;
+    }
+  }
+
+  void _handleZoomEnd(ZoomPanArgs args) {
+    if (args.axis?.name == 'primaryXAxis') {
+      _userZoomFactor = args.currentZoomFactor;
+      _userZoomPosition = args.currentZoomPosition;
+      _hasUserZoomedOrPanned = true;
+      if (args.currentZoomPosition <= 0.03 && !_isTriggeringHistoryLoad) {
+        _checkAndLoadMoreHistory();
+      }
+    }
+  }
+
+  Future<void> _checkAndLoadMoreHistory() async {
+    if (!mounted || _isTriggeringHistoryLoad) return;
+    final chartProvider = Provider.of<ChartProvider>(context, listen: false);
+    final watchlistProvider = Provider.of<WatchlistProvider>(context, listen: false);
+    if (chartProvider.isLoading ||
+        chartProvider.isLoadingMoreHistory ||
+        chartProvider.hasReachedHistoryEnd ||
+        chartProvider.chartData.isEmpty) {
+      return;
+    }
+
+    _isTriggeringHistoryLoad = true;
+    final int oldLen = chartProvider.chartData.length;
+    final double prevFactor = _userZoomFactor ?? (50.0 / oldLen).clamp(0.005, 1.0);
+    final double prevPos = _userZoomPosition ?? 0.0;
+
+    try {
+      final int addedCount = await chartProvider.loadMoreHistory(
+        watchlistProvider.currentExchange,
+        watchlistProvider.selectedSymbol,
+      );
+      if (addedCount > 0 && mounted) {
+        final int newLen = chartProvider.chartData.length;
+        final double newFactor = (prevFactor * (oldLen / newLen)).clamp(0.0005, 1.0);
+        final double newPos = (((prevPos * oldLen) + addedCount) / newLen).clamp(0.0, 1.0 - newFactor);
+
         setState(() {
           _hasUserZoomedOrPanned = true;
+          _userZoomFactor = newFactor;
+          _userZoomPosition = newPos;
+        });
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _xAxisController != null) {
+            _xAxisController!.zoomFactor = newFactor;
+            _xAxisController!.zoomPosition = newPos;
+          }
         });
       }
+    } finally {
+      _isTriggeringHistoryLoad = false;
     }
   }
 
@@ -328,7 +381,24 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
       _userZoomPosition = null;
     }
 
+    int? liveCandleUpdateType;
+    if (currentPrice != null && currentPrice > 0 && !chartProvider.isLoading) {
+      liveCandleUpdateType = chartProvider.updateLivePrice(currentPrice);
+    }
+
     final List<ChartData> chartData = chartProvider.chartData;
+
+    if (liveCandleUpdateType != null && _chartSeriesController != null && chartData.isNotEmpty) {
+      final int lastIdx = chartData.length - 1;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _chartSeriesController == null) return;
+        if (liveCandleUpdateType == 1) {
+          _chartSeriesController!.updateDataSource(updatedDataIndexes: <int>[lastIdx]);
+        } else if (liveCandleUpdateType == 2) {
+          _chartSeriesController!.updateDataSource(addedDataIndexes: <int>[lastIdx]);
+        }
+      });
+    }
 
     final List<PlotBand> plotBands = settingsProvider.showDrawings
         ? chartProvider.drawings.map<PlotBand>((d) {
@@ -789,7 +859,7 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
                         : _noPanBehavior,
                     onZoomStart: _handleZoomChange,
                     onZooming: _handleZoomChange,
-                    onZoomEnd: _handleZoomChange,
+                    onZoomEnd: _handleZoomEnd,
                     onZoomReset: (ZoomPanArgs args) {
                       if (args.axis?.name == 'primaryXAxis') {
                         setState(() {
@@ -821,6 +891,9 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
                     },
                     primaryXAxis: DateTimeCategoryAxis(
                       name: 'primaryXAxis',
+                      onRendererCreated: (DateTimeCategoryAxisController controller) {
+                        _xAxisController = controller;
+                      },
                       dateFormat: _getAxisDateFormat(chartProvider.activeInterval),
                       majorGridLines: const MajorGridLines(color: AppColors.gridLine, width: 0.5),
                       borderColor: Colors.transparent,
@@ -913,6 +986,37 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
                   ),
                 if (chartProvider.isLoading)
                   const Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary))),
+                if (chartProvider.isLoadingMoreHistory)
+                  Positioned(
+                    top: 12,
+                    left: 12,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppColors.card.withValues(alpha: 0.92),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.5)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'Cargando más historial...',
+                            style: TextStyle(color: AppColors.textPrimary, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ChartActiveToolChip(
                   activeTool: chartProvider.activeTool,
                   hasRulerStart: chartProvider.rulerStartPrice != null,
