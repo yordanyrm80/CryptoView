@@ -37,7 +37,7 @@ async def get_live_tickers():
     """
     pool = await get_db_pool()
     query = """
-        SELECT DISTINCT ON (ts.exchange, ts.symbol)
+        SELECT
             ts.exchange,
             ts.symbol,
             mc.close AS last_price,
@@ -47,9 +47,14 @@ async def get_live_tickers():
             mc.volume,
             mc.time AS last_time
         FROM tracked_symbols ts
-        JOIN market_candles mc ON ts.exchange = mc.exchange AND ts.symbol = mc.symbol
-        WHERE ts.is_active = TRUE
-        ORDER BY ts.exchange, ts.symbol, mc.time DESC;
+        CROSS JOIN LATERAL (
+            SELECT close, open, high, low, volume, time
+            FROM market_candles
+            WHERE exchange = ts.exchange AND symbol = ts.symbol
+            ORDER BY time DESC
+            LIMIT 1
+        ) mc
+        WHERE ts.is_active = TRUE;
     """
     async with pool.acquire() as conn:
         rows = await conn.fetch(query)

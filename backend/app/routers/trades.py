@@ -133,6 +133,33 @@ async def create_trades_batch(trades: List[TradeCreate]):
         "duplicates_skipped": len(trades) - inserted
     }
 
+_authenticated_exchanges: Dict[str, tuple[str, Any]] = {}
+
+async def get_authenticated_exchange(exchange_name: str, key: str, secret: str, passphrase: str = "") -> Any:
+    """Obtiene o reutiliza una instancia CCXT autenticada con pool de conexiones activo."""
+    cred_hash = f"{key}:{secret}:{passphrase}"
+    if exchange_name in _authenticated_exchanges:
+        old_hash, old_instance = _authenticated_exchanges[exchange_name]
+        if old_hash == cred_hash:
+            return old_instance
+        try:
+            await old_instance.close()
+        except Exception:
+            pass
+
+    exchange_class = getattr(ccxt, exchange_name)
+    config = {
+        "apiKey": key,
+        "secret": secret,
+        "enableRateLimit": True,
+    }
+    if passphrase:
+        config["password"] = passphrase
+
+    instance = exchange_class(config)
+    _authenticated_exchanges[exchange_name] = (cred_hash, instance)
+    return instance
+
 @router.post("/sync")
 async def sync_trades_from_exchange(
     exchange: str = Query(..., description="Nombre del exchange (kucoin, binance, bingx)"),
@@ -164,16 +191,7 @@ async def sync_trades_from_exchange(
     if not hasattr(ccxt, ex_name):
         raise HTTPException(status_code=400, detail=f"Exchange {ex_name} no soportado.")
 
-    exchange_class = getattr(ccxt, ex_name)
-    config = {
-        "apiKey": raw_key,
-        "secret": raw_secret,
-        "enableRateLimit": True,
-    }
-    if raw_pass:
-        config["password"] = raw_pass
-
-    client = exchange_class(config)
+    client = await get_authenticated_exchange(ex_name, raw_key, raw_secret, raw_pass)
     since_ms = int((datetime.now(timezone.utc) - timedelta(days=days)).timestamp() * 1000)
 
     # 2. Determinar qué símbolos consultar
@@ -263,8 +281,6 @@ async def sync_trades_from_exchange(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error sincronizando con {ex_name.upper()}: {str(e)}")
-    finally:
-        await client.close()
 
 @router.put("/{trade_id}")
 async def update_trade(

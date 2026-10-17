@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from contextlib import asynccontextmanager
 
 from app.database import init_db_pool, close_db_pool
@@ -35,6 +36,9 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "X-API-Key", "Authorization"],
 )
+
+# Compresión GZIP automática para respuestas mayores a 1KB (velas, tickers y trades)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Registrar Routers
 app.include_router(health.router)

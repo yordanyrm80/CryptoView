@@ -207,6 +207,13 @@ async def restore_database_backup(request: Request):
                 """, records)
             restored_counts["market_candles"] = len(candles)
 
+            # 7. Sincronizar secuencias serial (auto-increment) de PostgreSQL para evitar colisiones de ID
+            await conn.execute("""
+                SELECT setval(pg_get_serial_sequence('account_trades', 'id'), COALESCE((SELECT MAX(id) FROM account_trades), 1));
+                SELECT setval(pg_get_serial_sequence('account_withdrawals', 'id'), COALESCE((SELECT MAX(id) FROM account_withdrawals), 1));
+                SELECT setval(pg_get_serial_sequence('trade_matches', 'id'), COALESCE((SELECT MAX(id) FROM trade_matches), 1));
+            """)
+
     return {
         "status": "ok",
         "message": "Respaldo restaurado exitosamente en la base de datos.",

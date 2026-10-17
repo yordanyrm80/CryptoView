@@ -168,7 +168,28 @@ class WatchlistProvider extends ChangeNotifier {
     }
 
     try {
-      final newPrices = await ExchangeService.instance.fetchPrices(_currentExchange, _symbols);
+      final Map<String, double> newPrices = {};
+      try {
+        final tickers = await CloudApiService.instance.fetchTickers();
+        if (tickers.isNotEmpty) {
+          final currentEx = _currentExchange.trim().toLowerCase();
+          for (final t in tickers) {
+            final ex = (t['exchange'] ?? '').toString().toLowerCase();
+            final sym = (t['symbol'] ?? '').toString();
+            final price = (t['last_price'] as num?)?.toDouble() ?? 0.0;
+            if (ex == currentEx && price > 0 && _symbols.contains(sym)) {
+              newPrices[sym] = price;
+            }
+          }
+        }
+      } catch (_) {}
+
+      final missingSymbols = _symbols.where((s) => !newPrices.containsKey(s) || newPrices[s] == 0.0).toList();
+      if (missingSymbols.isNotEmpty) {
+        final direct = await ExchangeService.instance.fetchPrices(_currentExchange, missingSymbols);
+        newPrices.addAll(direct);
+      }
+
       bool changed = false;
       for (var entry in newPrices.entries) {
         if (_prices[entry.key] != entry.value) {
@@ -180,7 +201,7 @@ class WatchlistProvider extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      print('Error loading prices: $e');
+      debugPrint('Error loading prices: $e');
     } finally {
       _isFetchingPrices = false;
       if (isInitial) {
