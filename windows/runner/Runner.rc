@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.yordany" "\0"
-            VALUE "FileDescription", "cryptoview" "\0"
+            VALUE "FileDescription", "CryptoView" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "cryptoview" "\0"
+            VALUE "InternalName", "CryptoView" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.yordany. All rights reserved." "\0"
             VALUE "OriginalFilename", "cryptoview.exe" "\0"
-            VALUE "ProductName", "cryptoview" "\0"
+            VALUE "ProductName", "CryptoView" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

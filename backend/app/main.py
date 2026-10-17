@@ -1,8 +1,9 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.database import init_db_pool, close_db_pool
+from app.auth import verify_api_key
 from app.routers import candles, trades, symbols, health, api_keys, backup
 
 @asynccontextmanager
@@ -20,15 +21,19 @@ app = FastAPI(
     description="API privada de alta velocidad y almacén histórico 24/7 de velas y operaciones",
     version="1.0.0",
     lifespan=lifespan,
+    dependencies=[Depends(verify_api_key)],
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
 
-# Permitir CORS para cualquier cliente (CryptoView Desktop, web, bots)
+# Permitir CORS seguro para CryptoView Desktop y navegadores
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "X-API-Key", "Authorization"],
 )
 
 # Registrar Routers

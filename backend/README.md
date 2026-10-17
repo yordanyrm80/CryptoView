@@ -104,17 +104,16 @@ docker compose up -d --build
 
 ---
 
-## 📡 Endpoints principales de la API
-
-* **Diagnóstico / Salud**: `GET /api/v1/health`
-* **Documentación Interactiva (Swagger UI)**: `http://TU_IP:8000/docs`
+* **URL Base Segura (HTTPS)**: `https://129-146-110-196.sslip.io`
+* **Diagnóstico / Salud**: `GET /api/v1/health` (`https://129-146-110-196.sslip.io/api/v1/health`)
+* **Documentación Interactiva (Swagger UI)**: `https://129-146-110-196.sslip.io/docs`
 
 ### 🔑 Gestión de API Keys de Exchanges (`X-API-Key` requerido)
 
 * **Listar exchanges configurados** (claves enmascaradas):
   ```bash
   curl -H "X-API-Key: cryptoview_secret_token_seguro_2026" \
-       http://TU_IP:8000/api/v1/keys
+       https://129-146-110-196.sslip.io/api/v1/keys
   ```
 
 * **Guardar / Actualizar credenciales (se cifran automáticamente con AES-256)**:

@@ -7,7 +7,7 @@ class CloudApiService {
   static final CloudApiService instance = CloudApiService._init();
   CloudApiService._init();
 
-  static const String baseUrl = 'http://129.146.110.196:8000';
+  static const String baseUrl = 'https://129-146-110-196.sslip.io';
   static const String apiSecretToken = 'aa0d07ca7079caf19492d0fc4a762c593b3e02e205c669ae60de5cbbd66979c2';
 
   Map<String, String> get _authHeaders => {

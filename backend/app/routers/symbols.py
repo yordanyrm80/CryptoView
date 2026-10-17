@@ -4,7 +4,11 @@ from pydantic import BaseModel
 from app.database import get_db_pool
 from app.auth import verify_api_key
 
-router = APIRouter(prefix="/api/v1/symbols", tags=["Tracked Symbols"])
+router = APIRouter(
+    prefix="/api/v1/symbols",
+    tags=["Tracked Symbols"],
+    dependencies=[Depends(verify_api_key)]
+)
 
 class TrackedSymbolCreate(BaseModel):
     exchange: str
@@ -14,6 +18,7 @@ class TrackedSymbolCreate(BaseModel):
 async def list_tracked_symbols():
     """
     Lista las monedas en seguimiento junto con su estado de backfill histórico y rango de fechas almacenado.
+    Utiliza escaneo indexado ultrarrápido para evitar bloquear la base de datos con escaneos secuenciales.
     """
     pool = await get_db_pool()
     query = """
@@ -23,13 +28,21 @@ async def list_tracked_symbols():
             ts.is_active,
             COALESCE(ts.backfill_completed, FALSE) AS backfill_completed,
             ts.created_at,
-            COUNT(mc.time) AS total_candles_1m,
-            MIN(mc.time) AS oldest_candle_utc,
-            MAX(mc.time) AS latest_candle_utc
+            (
+                SELECT time 
+                FROM market_candles mc 
+                WHERE mc.exchange = ts.exchange AND mc.symbol = ts.symbol 
+                ORDER BY mc.time ASC 
+                LIMIT 1
+            ) AS oldest_candle_utc,
+            (
+                SELECT time 
+                FROM market_candles mc 
+                WHERE mc.exchange = ts.exchange AND mc.symbol = ts.symbol 
+                ORDER BY mc.time DESC 
+                LIMIT 1
+            ) AS latest_candle_utc
         FROM tracked_symbols ts
-        LEFT JOIN market_candles mc
-            ON ts.exchange = mc.exchange AND ts.symbol = mc.symbol
-        GROUP BY ts.exchange, ts.symbol, ts.is_active, ts.backfill_completed, ts.created_at
         ORDER BY ts.created_at DESC;
     """
     async with pool.acquire() as conn:

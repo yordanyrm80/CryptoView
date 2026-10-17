@@ -1,9 +1,14 @@
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Depends
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from app.database import get_db_pool
+from app.auth import verify_api_key
 
-router = APIRouter(prefix="/api/v1/candles", tags=["Candles"])
+router = APIRouter(
+    prefix="/api/v1/candles",
+    tags=["Candles"],
+    dependencies=[Depends(verify_api_key)]
+)
 
 # Vistas continuas precalculadas en TimescaleDB para máxima velocidad
 CONTINUOUS_VIEWS = {

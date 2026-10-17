@@ -138,7 +138,12 @@ class _MainContainerState extends State<MainContainer> {
                       onPressed: () => setState(() => _isWatchlistExpanded = !_isWatchlistExpanded),
                     ),
                     const SizedBox(width: 6),
-                    const Icon(Icons.candlestick_chart, color: AppColors.primary, size: 18),
+                    Image.asset(
+                      'assets/icon/app_icon.png',
+                      width: 22,
+                      height: 22,
+                      errorBuilder: (_, __, ___) => const Icon(Icons.candlestick_chart, color: AppColors.primary, size: 18),
+                    ),
                     const SizedBox(width: 8),
                     const Text('CryptoView Pro', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
                   ],
