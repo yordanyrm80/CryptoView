@@ -172,3 +172,14 @@ CREATE TABLE IF NOT EXISTS trade_matches (
     time TIMESTAMPTZ NOT NULL,
     notes TEXT DEFAULT ''
 );
+
+CREATE INDEX IF NOT EXISTS idx_matches_trades ON trade_matches (buy_trade_id, sell_trade_id);
+CREATE INDEX IF NOT EXISTS idx_matches_time ON trade_matches (time DESC);
+
+-- 8. Tabla de Estado y Latido del Colector 24/7 (Heartbeat)
+CREATE TABLE IF NOT EXISTS system_heartbeat (
+    service_name VARCHAR(32) PRIMARY KEY,
+    last_heartbeat TIMESTAMPTZ NOT NULL,
+    status VARCHAR(32) DEFAULT 'running',
+    details JSONB DEFAULT '{}'::jsonb
+);

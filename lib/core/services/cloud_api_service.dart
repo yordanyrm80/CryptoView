@@ -7,13 +7,65 @@ class CloudApiService {
   static final CloudApiService instance = CloudApiService._init();
   CloudApiService._init();
 
-  static const String baseUrl = 'https://129-146-110-196.sslip.io';
-  static const String apiSecretToken = 'aa0d07ca7079caf19492d0fc4a762c593b3e02e205c669ae60de5cbbd66979c2';
+  String _baseUrl = 'https://129-146-110-196.sslip.io';
+  String _apiSecretToken = 'aa0d07ca7079caf19492d0fc4a762c593b3e02e205c669ae60de5cbbd66979c2';
+
+  String get baseUrl => _baseUrl;
+  String get apiSecretToken => _apiSecretToken;
+
+  /// Actualiza dinámicamente la URL base y el token secreto de la API Cloud
+  void updateCredentials({required String baseUrl, required String apiSecretToken}) {
+    if (baseUrl.trim().isNotEmpty) {
+      _baseUrl = baseUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    }
+    if (apiSecretToken.trim().isNotEmpty) {
+      _apiSecretToken = apiSecretToken.trim();
+    }
+  }
 
   Map<String, String> get _authHeaders => {
         'Content-Type': 'application/json',
-        'X-API-Key': apiSecretToken,
+        'X-API-Key': _apiSecretToken,
       };
+
+  /// Realiza un chequeo de salud contra /api/v1/health usando las credenciales configuradas o de prueba
+  Future<Map<String, dynamic>> checkHealth({String? testUrl, String? testToken}) async {
+    try {
+      final targetUrl = (testUrl != null && testUrl.trim().isNotEmpty)
+          ? testUrl.trim().replaceAll(RegExp(r'/+$'), '')
+          : _baseUrl;
+      final targetToken = (testToken != null && testToken.trim().isNotEmpty)
+          ? testToken.trim()
+          : _apiSecretToken;
+
+      final uri = Uri.parse('$targetUrl/api/v1/health');
+      final response = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': targetToken,
+        },
+      ).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body) as Map<String, dynamic>;
+        data['http_code'] = 200;
+        return data;
+      } else {
+        return {
+          'status': 'error',
+          'http_code': response.statusCode,
+          'message': response.body,
+        };
+      }
+    } catch (e) {
+      return {
+        'status': 'error',
+        'http_code': 0,
+        'message': e.toString(),
+      };
+    }
+  }
 
   /// Obtiene velas históricas o agregadas desde TimescaleDB (`/api/v1/candles`).
   /// Si la moneda no tiene datos o el servidor no responde, devuelve `[]` para permitir fallback.

@@ -4,13 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:path/path.dart' show join;
 import '../../../core/database/database_helper.dart';
+import '../../../core/services/cloud_api_service.dart';
 
 class SettingsProvider with ChangeNotifier {
   // Default values
   static const String defaultBuyLineColor = '#00E676'; // Neon Green
   static const String defaultSellLineColor = '#FF5252'; // Neon Red
   static const String defaultCurrentPriceColor = '#00E5FF'; // Electric Cyan
-  static const String defaultCloudApiUrl = 'http://129.146.110.196:8000';
+  static const String defaultCloudApiUrl = 'https://129-146-110-196.sslip.io';
   static const String defaultCloudApiToken = 'aa0d07ca7079caf19492d0fc4a762c593b3e02e205c669ae60de5cbbd66979c2';
 
   String _buyLineColorHex = defaultBuyLineColor;
@@ -18,6 +19,9 @@ class SettingsProvider with ChangeNotifier {
   String _currentPriceColorHex = defaultCurrentPriceColor;
   String _cloudApiUrl = defaultCloudApiUrl;
   String _cloudApiToken = defaultCloudApiToken;
+
+  String get cloudApiUrl => _cloudApiUrl;
+  String get cloudApiToken => _cloudApiToken;
 
   bool _showBuyLines = true;
   bool _showBuyLabels = true;
@@ -140,6 +144,15 @@ class SettingsProvider with ChangeNotifier {
       final tWidthStr = await db.getGeneralSetting('tracker_width', defaultValue: '380.0');
       _trackerWidth = double.tryParse(tWidthStr ?? '380.0') ?? 380.0;
 
+      // Cargar configuración de conexión al Servidor Cloud (Oracle Cloud)
+      _cloudApiUrl = await db.getGeneralSetting('cloud_api_url', defaultValue: defaultCloudApiUrl) ?? defaultCloudApiUrl;
+      if (_cloudApiUrl.startsWith('http://129.146.110.196:8000')) {
+        _cloudApiUrl = defaultCloudApiUrl;
+        await db.setGeneralSetting('cloud_api_url', _cloudApiUrl);
+      }
+      _cloudApiToken = await db.getGeneralSetting('cloud_api_token', defaultValue: defaultCloudApiToken) ?? defaultCloudApiToken;
+      CloudApiService.instance.updateCredentials(baseUrl: _cloudApiUrl, apiSecretToken: _cloudApiToken);
+
       await loadBackups();
 
       _isLoaded = true;
@@ -220,7 +233,7 @@ class SettingsProvider with ChangeNotifier {
 
       final backupDirPath = await DatabaseHelper.instance.getBackupsDirectoryPath();
       final now = DateTime.now().toUtc();
-      final pad = (int n) => n.toString().padLeft(2, '0');
+      String pad(int n) => n.toString().padLeft(2, '0');
       final suffix = includeCandles ? 'full' : 'privado';
       final filename =
           'cryptoview_cloud_${suffix}_${now.year}-${pad(now.month)}-${pad(now.day)}_${pad(now.hour)}-${pad(now.minute)}-${pad(now.second)}.json.gz';
@@ -460,10 +473,26 @@ class SettingsProvider with ChangeNotifier {
     await db.setGeneralSetting('show_current_price_line', val);
   }
 
+  /// Guarda y actualiza las credenciales del servidor Cloud en SQLite y en CloudApiService
+  Future<void> saveCloudApiCredentials(String url, String token) async {
+    _cloudApiUrl = url.trim().replaceAll(RegExp(r'/+$'), '');
+    _cloudApiToken = token.trim();
+    CloudApiService.instance.updateCredentials(baseUrl: _cloudApiUrl, apiSecretToken: _cloudApiToken);
+    notifyListeners();
+
+    final db = DatabaseHelper.instance;
+    await db.setGeneralSetting('cloud_api_url', _cloudApiUrl);
+    await db.setGeneralSetting('cloud_api_token', _cloudApiToken);
+  }
+
   Future<void> resetToDefaults() async {
     _buyLineColorHex = defaultBuyLineColor;
     _sellLineColorHex = defaultSellLineColor;
     _currentPriceColorHex = defaultCurrentPriceColor;
+    _cloudApiUrl = defaultCloudApiUrl;
+    _cloudApiToken = defaultCloudApiToken;
+    CloudApiService.instance.updateCredentials(baseUrl: defaultCloudApiUrl, apiSecretToken: defaultCloudApiToken);
+
     _showBuyLines = true;
     _showBuyLabels = true;
     _showSellLines = true;
@@ -480,6 +509,8 @@ class SettingsProvider with ChangeNotifier {
     await db.setGeneralSetting('buy_line_color', defaultBuyLineColor);
     await db.setGeneralSetting('sell_line_color', defaultSellLineColor);
     await db.setGeneralSetting('current_price_color', defaultCurrentPriceColor);
+    await db.setGeneralSetting('cloud_api_url', defaultCloudApiUrl);
+    await db.setGeneralSetting('cloud_api_token', defaultCloudApiToken);
     await db.setGeneralSetting('show_buy_lines', '1');
     await db.setGeneralSetting('show_buy_labels', '1');
     await db.setGeneralSetting('show_sell_lines', '1');
@@ -492,3 +523,4 @@ class SettingsProvider with ChangeNotifier {
     await db.setGeneralSetting('show_drawing_labels', '1');
   }
 }
+

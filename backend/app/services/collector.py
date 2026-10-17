@@ -155,12 +155,75 @@ async def sync_symbol_backward(client: ExchangeClient, pool, exchange: str, symb
         new_oldest = candles[0]['time'].strftime('%Y-%m-%d %H:%M UTC')
         print(f"[{now_utc}] ⏪ BACKFILL {exchange.upper()} {symbol}: +{saved_count} velas antiguas guardadas (Historial ya llega hasta {new_oldest}).")
 
+import json
+import time
+
+async def update_worker_heartbeat(pool, details: dict):
+    """Actualiza la marca de latido del worker en system_heartbeat para monitoreo en vivo."""
+    try:
+        async with pool.acquire() as conn:
+            await conn.execute("""
+                INSERT INTO system_heartbeat (service_name, last_heartbeat, status, details)
+                VALUES ('collector', NOW(), 'running', $1::jsonb)
+                ON CONFLICT (service_name)
+                DO UPDATE SET last_heartbeat = NOW(), status = 'running', details = EXCLUDED.details;
+            """, json.dumps(details))
+    except Exception as e:
+        print(f"[Heartbeat Warn] {e}")
+
+async def auto_sync_exchange_trades(pool, client: ExchangeClient):
+    """Sincroniza en segundo plano las últimas órdenes ejecutadas (48h) de los exchanges configurados."""
+    try:
+        async with pool.acquire() as conn:
+            active_keys = await conn.fetch("SELECT exchange FROM api_keys WHERE is_active = TRUE;")
+        for k in active_keys:
+            ex_name = k["exchange"].lower().strip()
+            ex_instance = await client.get_exchange(ex_name)
+            if not ex_instance:
+                continue
+            since_ms = int((datetime.now(timezone.utc) - timedelta(days=2)).timestamp() * 1000)
+            try:
+                trades = await ex_instance.fetch_my_trades(symbol=None, since=since_ms, limit=100)
+                if trades:
+                    insert_query = """
+                        INSERT INTO account_trades (trade_id, order_id, exchange, symbol, side, price, amount, fee, fee_currency, time, remaining_amount, notes)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                        ON CONFLICT (exchange, trade_id) DO NOTHING;
+                    """
+                    async with pool.acquire() as conn:
+                        async with conn.transaction():
+                            for t in trades:
+                                t_id = str(t.get('id') or '')
+                                if not t_id:
+                                    continue
+                                t_sym = t.get('symbol', '').replace('-', '/').upper()
+                                t_side = t.get('side', 'buy').lower()
+                                t_price = float(t.get('price') or 0.0)
+                                t_amount = float(t.get('amount') or 0.0)
+                                t_fee = float((t.get('fee') or {}).get('cost') or 0.0)
+                                t_fee_curr = (t.get('fee') or {}).get('currency') or 'USDT'
+                                t_time = datetime.fromtimestamp((t.get('timestamp') or 0) / 1000.0, tz=timezone.utc)
+                                await conn.execute(
+                                    insert_query,
+                                    t_id, str(t.get('order') or ''), ex_name, t_sym, t_side,
+                                    t_price, t_amount, t_fee, t_fee_curr, t_time,
+                                    t_amount if t_side == 'buy' else 0.0,
+                                    f"Auto-Sync 24/7 ({ex_name.upper()})"
+                                )
+                    now_str = datetime.now(timezone.utc).strftime('%H:%M:%S UTC')
+                    print(f"[{now_str}] 🔄 Auto-Sync Trades {ex_name.upper()}: {len(trades)} órdenes procesadas en segundo plano.")
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"[AutoSyncTrades Error] {e}")
+
 async def run_collector():
-    print("Iniciando CryptoView Ingestion Worker 24/7 (Tiempo Real + Backfill Progresivo Seguro)...")
+    print("Iniciando CryptoView Ingestion Worker 24/7 (Tiempo Real + Backfill + Auto-Sync Trades)...")
     pool = await init_db_pool()
     client = ExchangeClient()
 
     backfill_cursor = 0
+    last_trades_sync = 0.0
 
     try:
         while True:
@@ -170,13 +233,20 @@ async def run_collector():
             # 2. Leer dinámicamente qué monedas están activas en PostgreSQL
             active_symbols = await get_active_tracked_symbols(pool)
 
+            # 3. Tarea Periódica: Auto-Sync de Trades cada 10 minutos (600s)
+            now_epoch = time.time()
+            if now_epoch - last_trades_sync >= 600:
+                await auto_sync_exchange_trades(pool, client)
+                last_trades_sync = now_epoch
+
             if not active_symbols:
                 now_utc = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
                 print(f"[{now_utc}] Sin monedas activas en tracked_symbols. Esperando...")
+                await update_worker_heartbeat(pool, {"status": "waiting_symbols", "active_symbols": 0})
                 await asyncio.sleep(10)
                 continue
 
-            # 3. Tarea 1: Sincronizar Tiempo Real (hacia adelante) para todas las monedas activas
+            # 4. Tarea 1: Sincronizar Tiempo Real (hacia adelante) para todas las monedas activas
             for exchange, symbol, _ in active_symbols:
                 try:
                     await sync_symbol_forward(client, pool, exchange, symbol)
@@ -184,8 +254,7 @@ async def run_collector():
                 except Exception as e:
                     print(f"[Error Collector Forward] {exchange} {symbol}: {e}")
 
-            # 4. Tarea 2: Backfill Progresivo (hacia atrás) con Round-Robin rotativo
-            # Alterna secuencialmente entre todas las monedas pendientes para que todas avancen en paralelo hacia el pasado.
+            # 5. Tarea 2: Backfill Progresivo (hacia atrás) con Round-Robin rotativo
             pending_backfill = [(ex, sym) for ex, sym, done in active_symbols if not done]
             if pending_backfill:
                 backfill_cursor = backfill_cursor % len(pending_backfill)
@@ -196,6 +265,13 @@ async def run_collector():
                     await sync_symbol_backward(client, pool, ex_bf, sym_bf)
                 except Exception as e:
                     print(f"[Error Collector Backfill] {ex_bf} {sym_bf}: {e}")
+
+            # 6. Actualizar latido saludable (Heartbeat) del worker
+            await update_worker_heartbeat(pool, {
+                "active_symbols": len(active_symbols),
+                "pending_backfill": len(pending_backfill),
+                "timestamp_utc": datetime.now(timezone.utc).isoformat()
+            })
 
             # Reposo entre ciclos (20s por defecto)
             await asyncio.sleep(settings.COLLECTOR_SLEEP_SECONDS)

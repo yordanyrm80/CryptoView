@@ -119,7 +119,53 @@ async def get_candles(
         params.append(limit)
         query += f" ORDER BY time DESC LIMIT ${len(params)}"
 
-    # Caso 3: Agregación dinámica al vuelo con time_bucket
+    # Caso 3: Agregación rápida desde candles_5m (15m, 30m) - 5x menos datos que escanear
+    elif norm_interval in ("15m", "30m"):
+        bucket_duration = "15 minutes" if norm_interval == "15m" else "30 minutes"
+        query = f"""
+            SELECT
+                time_bucket('{bucket_duration}', time) AS time,
+                first(open, time) AS open,
+                max(high) AS high,
+                min(low) AS low,
+                last(close, time) AS close,
+                sum(volume) AS volume
+            FROM candles_5m
+            WHERE exchange = $1 AND symbol = $2
+        """
+        if start_time:
+            params.append(start_time)
+            query += f" AND time >= ${len(params)}"
+        if end_time:
+            params.append(end_time)
+            query += f" AND time <= ${len(params)}"
+        params.append(limit)
+        query += f" GROUP BY 1 ORDER BY 1 DESC LIMIT ${len(params)}"
+
+    # Caso 4: Agregación ultrarrápida desde candles_1h (2h, 4h, 6h, 12h, 1w) - 60x menos datos que escanear
+    elif norm_interval in ("2h", "4h", "6h", "12h", "1w"):
+        bucket_duration = TIME_BUCKET_MAP.get(norm_interval, "4 hours")
+        query = f"""
+            SELECT
+                time_bucket('{bucket_duration}', time) AS time,
+                first(open, time) AS open,
+                max(high) AS high,
+                min(low) AS low,
+                last(close, time) AS close,
+                sum(volume) AS volume
+            FROM candles_1h
+            WHERE exchange = $1 AND symbol = $2
+        """
+        if start_time:
+            params.append(start_time)
+            query += f" AND time >= ${len(params)}"
+        if end_time:
+            params.append(end_time)
+            query += f" AND time <= ${len(params)}"
+        params.append(limit)
+        query += f" GROUP BY 1 ORDER BY 1 DESC LIMIT ${len(params)}"
+
+    # Caso 5: Fallback dinámico a market_candles
     else:
         bucket_duration = TIME_BUCKET_MAP.get(norm_interval, "1 hour")
         query = f"""
