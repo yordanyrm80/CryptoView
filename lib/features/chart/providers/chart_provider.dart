@@ -10,6 +10,7 @@ class ChartProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _isLoadingMoreHistory = false;
   bool _hasReachedHistoryEnd = false;
+  int _loadGeneration = 0;
   bool _isDrawingMode = false; // Kept for backwards compatibility
   String _activeInterval = '1h'; // default 1 hour
 
@@ -43,6 +44,7 @@ class ChartProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isLoadingMoreHistory => _isLoadingMoreHistory;
   bool get hasReachedHistoryEnd => _hasReachedHistoryEnd;
+  int get loadGeneration => _loadGeneration;
   bool get isDrawingMode => _isDrawingMode;
   String get activeInterval => _activeInterval;
   String get activeTool => _activeTool;
@@ -264,6 +266,9 @@ class ChartProvider extends ChangeNotifier {
     _rulerPercent = null;
     _isLoadingMoreHistory = false;
     _hasReachedHistoryEnd = false;
+    _loadGeneration++;
+
+    int? cachedOldestTime;
 
     // 1. Immediately load any previously saved candles from local SQLite
     try {
@@ -274,6 +279,7 @@ class ChartProvider extends ChangeNotifier {
         limit: 1500,
       );
       if (cached.isNotEmpty) {
+        cachedOldestTime = (cached.first['time'] as num).toInt();
         _candles = cached;
         _rebuildChartData();
         _isLoading = false;
@@ -317,6 +323,10 @@ class ChartProvider extends ChangeNotifier {
           limit: 1500,
         );
         _candles = merged.isNotEmpty ? merged : fetchedCandles;
+        final int newOldestTime = (_candles.first['time'] as num).toInt();
+        if (cachedOldestTime == null || newOldestTime != cachedOldestTime) {
+          _loadGeneration++;
+        }
         _rebuildChartData();
       }
 

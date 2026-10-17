@@ -110,6 +110,19 @@ async def sync_symbol_forward(client: ExchangeClient, pool, exchange: str, symbo
         now_utc = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
         print(f"[{now_utc}] ⚡ LIVE {exchange.upper()} {symbol} (1m): {saved_count} velas actualizadas.")
 
+async def refresh_aggregates_window(pool, start_dt: datetime, end_dt: datetime):
+    """Refresca las vistas materializadas continuas (5m, 1h, 1d) para el rango histórico recién descargado."""
+    try:
+        async with pool.acquire() as conn:
+            for view_name in ('candles_1d', 'candles_1h', 'candles_5m'):
+                await conn.execute(
+                    f"CALL refresh_continuous_aggregate('{view_name}', $1::timestamptz, $2::timestamptz);",
+                    start_dt,
+                    end_dt,
+                )
+    except Exception as e:
+        print(f"[Warn Aggregate Refresh] {e}")
+
 async def sync_symbol_backward(client: ExchangeClient, pool, exchange: str, symbol: str):
     """Tarea 2 (Backfill Progresivo): Retrocede un bloque de 25 horas (1500 velas de 1m) hacia el pasado."""
     oldest_time = await get_oldest_candle_time(pool, exchange, symbol)
@@ -134,6 +147,11 @@ async def sync_symbol_backward(client: ExchangeClient, pool, exchange: str, symb
 
     if candles:
         saved_count = await save_candles(pool, exchange, symbol, candles)
+        # Refrescar vistas continuas (1d, 1h, 5m) incluyendo margen de 1 día alrededor del bloque
+        from datetime import timedelta
+        win_start = candles[0]['time'] - timedelta(days=1)
+        win_end = candles[-1]['time'] + timedelta(days=1)
+        await refresh_aggregates_window(pool, win_start, win_end)
         new_oldest = candles[0]['time'].strftime('%Y-%m-%d %H:%M UTC')
         print(f"[{now_utc}] ⏪ BACKFILL {exchange.upper()} {symbol}: +{saved_count} velas antiguas guardadas (Historial ya llega hasta {new_oldest}).")
 

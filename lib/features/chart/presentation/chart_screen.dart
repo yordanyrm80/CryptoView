@@ -38,6 +38,7 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
   String? _lastLoadedSymbol;
   String? _lastLoadedExchange;
   String? _lastLoadedInterval;
+  int? _lastLoadGeneration;
   bool _hasUserZoomedOrPanned = false;
   bool _isTriggeringHistoryLoad = false;
   double? _userZoomFactor;
@@ -53,6 +54,9 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
       _userZoomFactor = args.currentZoomFactor;
       _userZoomPosition = args.currentZoomPosition;
       _hasUserZoomedOrPanned = true;
+      if (args.currentZoomPosition <= 0.08 && !_isTriggeringHistoryLoad) {
+        _checkAndLoadMoreHistory();
+      }
     }
   }
 
@@ -61,7 +65,7 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
       _userZoomFactor = args.currentZoomFactor;
       _userZoomPosition = args.currentZoomPosition;
       _hasUserZoomedOrPanned = true;
-      if (args.currentZoomPosition <= 0.03 && !_isTriggeringHistoryLoad) {
+      if (args.currentZoomPosition <= 0.08 && !_isTriggeringHistoryLoad) {
         _checkAndLoadMoreHistory();
       }
     }
@@ -90,8 +94,13 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
       );
       if (addedCount > 0 && mounted) {
         final int newLen = chartProvider.chartData.length;
-        final double newFactor = (prevFactor * (oldLen / newLen)).clamp(0.0005, 1.0);
-        final double newPos = (((prevPos * oldLen) + addedCount) / newLen).clamp(0.0, 1.0 - newFactor);
+        final bool wasFullyZoomedOut = prevFactor >= 0.98;
+        final double newFactor = wasFullyZoomedOut
+            ? 1.0
+            : (prevFactor * (oldLen / newLen)).clamp(0.0005, 1.0);
+        final double newPos = wasFullyZoomedOut
+            ? 0.0
+            : (((prevPos * oldLen) + addedCount) / newLen).clamp(0.0, 1.0 - newFactor);
 
         setState(() {
           _hasUserZoomedOrPanned = true;
@@ -103,6 +112,9 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
           if (mounted && _xAxisController != null) {
             _xAxisController!.zoomFactor = newFactor;
             _xAxisController!.zoomPosition = newPos;
+          }
+          if (mounted && newPos <= 0.08 && !chartProvider.hasReachedHistoryEnd) {
+            _checkAndLoadMoreHistory();
           }
         });
       }
@@ -145,10 +157,10 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
   }
 
   DateFormat _getAxisDateFormat(String interval) {
-    if (interval == '1d') {
-      return DateFormat('MM/dd');
+    if (interval == '1d' || interval == '1w') {
+      return DateFormat('dd/MM/yy');
     } else if (interval == '4h') {
-      return DateFormat('MM/dd HH:mm');
+      return DateFormat('dd/MM/yy HH:mm');
     } else {
       return DateFormat('HH:mm');
     }
@@ -372,10 +384,12 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
 
     if (_lastLoadedSymbol != currentSymbol ||
         _lastLoadedExchange != currentExchange ||
-        _lastLoadedInterval != chartProvider.activeInterval) {
+        _lastLoadedInterval != chartProvider.activeInterval ||
+        _lastLoadGeneration != chartProvider.loadGeneration) {
       _lastLoadedSymbol = currentSymbol;
       _lastLoadedExchange = currentExchange;
       _lastLoadedInterval = chartProvider.activeInterval;
+      _lastLoadGeneration = chartProvider.loadGeneration;
       _hasUserZoomedOrPanned = false;
       _userZoomFactor = null;
       _userZoomPosition = null;
@@ -726,6 +740,7 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
                   )
                 else
                   SfCartesianChart(
+                    key: ValueKey('$currentExchange:$currentSymbol:${chartProvider.activeInterval}:${chartProvider.loadGeneration}'),
                     backgroundColor: const Color(0xFF0B0E11),
                     plotAreaBorderWidth: 0,
                     onChartTouchInteractionDown: (ChartTouchInteractionArgs args) {
