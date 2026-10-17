@@ -11,6 +11,47 @@ class WatchlistScreen extends StatelessWidget {
 
   const WatchlistScreen({Key? key, required this.onTabChange}) : super(key: key);
 
+  void _confirmDeleteSymbol(BuildContext context, WatchlistProvider watchlistProvider, String symbol) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Row(
+          children: [
+            Icon(Icons.delete_outline, color: AppColors.bear, size: 22),
+            SizedBox(width: 8),
+            Text(
+              'Eliminar moneda',
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: Text(
+          '¿Estás seguro de que deseas eliminar $symbol de tu lista de seguimiento?',
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancelar', style: TextStyle(color: AppColors.textMuted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.bear,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              watchlistProvider.removeSymbol(symbol);
+            },
+            child: const Text('Eliminar', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final watchlistProvider = Provider.of<WatchlistProvider>(context);
@@ -23,33 +64,41 @@ class WatchlistScreen extends StatelessWidget {
         elevation: 0,
         title: const Text(
           'CryptoView',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: AppColors.textPrimary,
             fontWeight: FontWeight.bold,
-            fontSize: 20,
+            fontSize: 18,
             letterSpacing: 0.5,
           ),
         ),
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(60),
+          preferredSize: const Size.fromHeight(48),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             color: AppColors.card,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Exchange:',
-                  style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                const Flexible(
+                  child: Text(
+                    'Exchange:',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                  ),
                 ),
+                const SizedBox(width: 4),
                 DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
+                    isDense: true,
                     dropdownColor: AppColors.surface,
                     value: watchlistProvider.currentExchange,
                     style: const TextStyle(
                       color: AppColors.primary,
                       fontWeight: FontWeight.bold,
-                      fontSize: 16,
+                      fontSize: 14,
                     ),
                     items: const ['Binance', 'KuCoin', 'BingX']
                         .map((val) => DropdownMenuItem(value: val, child: Text(val)))
@@ -65,21 +114,25 @@ class WatchlistScreen extends StatelessWidget {
         ),
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.symmetric(horizontal: 10.0, vertical: 10.0),
         child: Column(
           children: [
             AddSymbolBar(onAddSymbol: watchlistProvider.addSymbol),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'LISTA DE SEGUIMIENTO',
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.0,
+                const Expanded(
+                  child: Text(
+                    'LISTA DE SEGUIMIENTO',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                    ),
                   ),
                 ),
                 if (watchlistProvider.isLoading)
@@ -93,23 +146,25 @@ class WatchlistScreen extends StatelessWidget {
                   )
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Expanded(
               child: watchlistProvider.symbols.isEmpty
                   ? Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: const [
-                          Icon(Icons.star_border, size: 64, color: AppColors.border),
-                          SizedBox(height: 16),
+                          Icon(Icons.star_border, size: 48, color: AppColors.border),
+                          SizedBox(height: 12),
                           Text(
                             'Tu lista está vacía',
-                            style: TextStyle(color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.bold),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.bold),
                           ),
-                          SizedBox(height: 8),
+                          SizedBox(height: 6),
                           Text(
                             'Busca y añade un par arriba.',
-                            style: TextStyle(color: AppColors.textMuted, fontSize: 14),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
                           ),
                         ],
                       ),
@@ -135,7 +190,7 @@ class WatchlistScreen extends StatelessWidget {
                             onTabChange(1);
                           },
                           onToggleFavorite: () => watchlistProvider.toggleFavorite(symbol),
-                          onDelete: () => watchlistProvider.removeSymbol(symbol),
+                          onDelete: () => _confirmDeleteSymbol(context, watchlistProvider, symbol),
                         );
                       },
                     ),

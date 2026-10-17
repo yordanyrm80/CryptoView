@@ -335,7 +335,7 @@ class SettingsProvider with ChangeNotifier {
   }
 
   Future<void> setWatchlistWidth(double w) async {
-    _watchlistWidth = w.clamp(180.0, 550.0);
+    _watchlistWidth = w.clamp(145.0, 550.0);
     notifyListeners();
     await DatabaseHelper.instance.setGeneralSetting('watchlist_width', _watchlistWidth.toStringAsFixed(1));
   }

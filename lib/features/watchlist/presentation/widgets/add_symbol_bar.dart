@@ -32,31 +32,37 @@ class _AddSymbolBarState extends State<AddSymbolBar> {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.border, width: 1),
       ),
       child: Row(
         children: [
           const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12.0),
-            child: Icon(Icons.add_chart, color: AppColors.textSecondary),
+            padding: EdgeInsets.only(left: 8.0, right: 6.0),
+            child: Icon(Icons.add_chart, color: AppColors.textSecondary, size: 18),
           ),
           Expanded(
             child: TextField(
               controller: _controller,
-              style: const TextStyle(color: AppColors.textPrimary),
+              style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
               decoration: const InputDecoration(
+                isDense: true,
+                contentPadding: EdgeInsets.symmetric(vertical: 10),
                 hintText: 'Añadir par (ej: SOL/USDT)...',
-                hintStyle: TextStyle(color: AppColors.textMuted),
+                hintStyle: TextStyle(color: AppColors.textMuted, fontSize: 12),
                 border: InputBorder.none,
               ),
               onSubmitted: (_) => _submit(),
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.add_circle, color: AppColors.primary),
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.all(6),
+            constraints: const BoxConstraints(),
+            icon: const Icon(Icons.add_circle, color: AppColors.primary, size: 20),
             onPressed: _submit,
-          )
+          ),
+          const SizedBox(width: 4),
         ],
       ),
     );
