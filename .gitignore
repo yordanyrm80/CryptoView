@@ -55,4 +55,10 @@ app.*.map.json
 __pycache__/
 *.py[cod]
 *$py.class
+.venv/
+.pytest_cache/
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
 
