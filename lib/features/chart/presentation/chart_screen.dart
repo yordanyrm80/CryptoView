@@ -433,7 +433,7 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
               text: settingsProvider.showDrawingLabels ? '  $label: \$${price.toStringAsFixed(2)}' : null,
               textStyle: const TextStyle(color: AppColors.textPrimary, fontSize: 10, fontWeight: FontWeight.bold),
               horizontalTextAlignment: TextAnchor.start,
-              verticalTextAlignment: TextAnchor.middle,
+              verticalTextAlignment: TextAnchor.end,
             );
           }).toList()
         : [];
@@ -455,7 +455,7 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
             fontWeight: FontWeight.bold,
           ),
           horizontalTextAlignment: TextAnchor.start,
-          verticalTextAlignment: TextAnchor.middle,
+          verticalTextAlignment: TextAnchor.end,
         ),
       );
     }
@@ -548,7 +548,7 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
               fontWeight: FontWeight.bold,
             ),
             horizontalTextAlignment: TextAnchor.start,
-            verticalTextAlignment: TextAnchor.middle,
+            verticalTextAlignment: isBuyOrder ? TextAnchor.end : TextAnchor.start,
           ),
         );
       }
