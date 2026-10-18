@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../core/database/database_helper.dart';
+import '../../../core/services/cloud_api_service.dart';
 import '../../../core/services/exchanges/exchange_service.dart';
 import '../domain/models/chart_candle_model.dart';
 
@@ -12,6 +14,10 @@ class ChartProvider extends ChangeNotifier {
   bool _hasReachedHistoryEnd = false;
   bool _isDrawingMode = false; // Kept for backwards compatibility
   String _activeInterval = '1h'; // default 1 hour
+  String _currentExchange = '';
+  String _currentSymbol = '';
+  Timer? _incrementalTimer;
+  bool _isRefreshingLatest = false;
 
   // Tool states: 'none', 'horizontal_line', 'ruler'
   String _activeTool = 'none';
@@ -264,6 +270,9 @@ class ChartProvider extends ChangeNotifier {
     _rulerPercent = null;
     _isLoadingMoreHistory = false;
     _hasReachedHistoryEnd = false;
+    _currentExchange = exchange;
+    _currentSymbol = symbol;
+    _startIncrementalRefreshTimer();
 
     // 1. Immediately load any previously saved candles from local SQLite
     try {
@@ -323,7 +332,7 @@ class ChartProvider extends ChangeNotifier {
       // 5. Fetch drawings from SQLite
       _drawings = List<Map<String, dynamic>>.from(await DatabaseHelper.instance.queryDrawings(symbol, exchange));
     } catch (e) {
-      print('Error loading chart data: $e');
+      debugPrint('Error loading chart data: $e');
     }
 
     _isLoading = false;
@@ -444,5 +453,84 @@ class ChartProvider extends ChangeNotifier {
     _drawings = [];
     clearRuler();
     notifyListeners();
+  }
+
+  void _startIncrementalRefreshTimer() {
+    _incrementalTimer?.cancel();
+    _incrementalTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      refreshLatestCandles();
+    });
+  }
+
+  /// Descarga incrementalmente las últimas 3-5 velas para consolidar
+  /// velas recién cerradas sin reiniciar el gráfico ni alterar el zoom o desplazamiento del usuario.
+  Future<void> refreshLatestCandles() async {
+    if (_isRefreshingLatest || _candles.isEmpty || _currentExchange.isEmpty || _currentSymbol.isEmpty) return;
+    _isRefreshingLatest = true;
+
+    try {
+      final List<Map<String, dynamic>> latestCandles = await CloudApiService.instance.fetchCandles(
+        _currentExchange,
+        _currentSymbol,
+        _activeInterval,
+        limit: 5,
+      );
+
+      if (latestCandles.isEmpty) return;
+
+      bool hasChanges = false;
+      for (final newC in latestCandles) {
+        final int newTime = (newC['time'] as num).toInt();
+        final int existingIdx = _candles.indexWhere((c) => (c['time'] as num).toInt() == newTime);
+
+        if (existingIdx != -1) {
+          final existing = _candles[existingIdx];
+          if ((existing['open'] as num).toDouble() != (newC['open'] as num).toDouble() ||
+              (existing['high'] as num).toDouble() != (newC['high'] as num).toDouble() ||
+              (existing['low'] as num).toDouble() != (newC['low'] as num).toDouble() ||
+              (existing['close'] as num).toDouble() != (newC['close'] as num).toDouble()) {
+            _candles[existingIdx] = newC;
+            _chartData[existingIdx] = ChartData(
+              date: DateTime.fromMillisecondsSinceEpoch(newTime * 1000),
+              open: (newC['open'] as num).toDouble(),
+              high: (newC['high'] as num).toDouble(),
+              low: (newC['low'] as num).toDouble(),
+              close: (newC['close'] as num).toDouble(),
+            );
+            hasChanges = true;
+          }
+        } else if (newTime > (_candles.last['time'] as num).toInt()) {
+          _candles.add(newC);
+          _chartData.add(ChartData(
+            date: DateTime.fromMillisecondsSinceEpoch(newTime * 1000),
+            open: (newC['open'] as num).toDouble(),
+            high: (newC['high'] as num).toDouble(),
+            low: (newC['low'] as num).toDouble(),
+            close: (newC['close'] as num).toDouble(),
+          ));
+          hasChanges = true;
+        }
+      }
+
+      if (hasChanges) {
+        DatabaseHelper.instance.saveCandles(
+          exchange: _currentExchange,
+          symbol: _currentSymbol,
+          interval: _activeInterval,
+          candles: latestCandles,
+        );
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('[ChartProvider] refreshLatestCandles error: $e');
+    } finally {
+      _isRefreshingLatest = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _incrementalTimer?.cancel();
+    super.dispose();
   }
 }
