@@ -234,20 +234,99 @@ class SettingsProvider with ChangeNotifier {
       final backupDirPath = await DatabaseHelper.instance.getBackupsDirectoryPath();
       final now = DateTime.now().toUtc();
       String pad(int n) => n.toString().padLeft(2, '0');
-      final suffix = includeCandles ? 'full' : 'privado';
+      final suffix = includeCandles ? 'full_candles' : 'cuenta_trades';
       final filename =
-          'cryptoview_cloud_${suffix}_${now.year}-${pad(now.month)}-${pad(now.day)}_${pad(now.hour)}-${pad(now.minute)}-${pad(now.second)}.json.gz';
+          'cryptoview_${suffix}_${now.year}-${pad(now.month)}-${pad(now.day)}_${pad(now.hour)}-${pad(now.minute)}-${pad(now.second)}.json.gz';
       final file = File(join(backupDirPath, filename));
       await file.writeAsBytes(finalGzBytes, flush: true);
 
       await loadBackups();
       _isBackupBusy = false;
-      _backupMessage = 'Salva completa (Local + Servidor Cloud) guardada con éxito.';
+      _backupMessage = 'Salva de cuenta y trades (Local + Servidor Cloud) guardada con éxito.';
       notifyListeners();
       return file.path;
     } catch (e) {
       _isBackupBusy = false;
       _backupMessage = 'Error descargando salva del servidor: $e';
+      notifyListeners();
+      return null;
+    }
+  }
+
+  // ==========================================
+  // VOLCADOS COMPLETOS NATIVOS TIMESCALEDB (.sql.gz)
+  // ==========================================
+
+  Future<Map<String, dynamic>> checkPgDumpStatus() async {
+    try {
+      final uri = Uri.parse('$_cloudApiUrl/api/v1/backup/pg_dump/status');
+      final res = await http.get(uri, headers: {'X-API-Key': _cloudApiToken}).timeout(const Duration(seconds: 10));
+      if (res.statusCode == 200) {
+        return jsonDecode(res.body) as Map<String, dynamic>;
+      }
+      return {'error': 'HTTP ${res.statusCode}: ${res.body}'};
+    } catch (e) {
+      return {'error': e.toString()};
+    }
+  }
+
+  Future<Map<String, dynamic>> triggerPgDumpCreation() async {
+    try {
+      final uri = Uri.parse('$_cloudApiUrl/api/v1/backup/pg_dump/create');
+      final res = await http.post(uri, headers: {'X-API-Key': _cloudApiToken}).timeout(const Duration(seconds: 15));
+      if (res.statusCode == 200) {
+        return jsonDecode(res.body) as Map<String, dynamic>;
+      }
+      return {'error': 'HTTP ${res.statusCode}: ${res.body}'};
+    } catch (e) {
+      return {'error': e.toString()};
+    }
+  }
+
+  Future<String?> downloadPgDumpFile(
+    String filename, {
+    void Function(double progress, int receivedBytes, int totalBytes)? onProgress,
+  }) async {
+    _isBackupBusy = true;
+    _backupMessage = null;
+    notifyListeners();
+
+    try {
+      final uri = Uri.parse('$_cloudApiUrl/api/v1/backup/pg_dump/download/$filename');
+      final request = http.Request('GET', uri);
+      request.headers['X-API-Key'] = _cloudApiToken;
+
+      final streamedResponse = await request.send().timeout(const Duration(minutes: 15));
+      if (streamedResponse.statusCode != 200) {
+        throw Exception('HTTP ${streamedResponse.statusCode}');
+      }
+
+      final totalBytes = streamedResponse.contentLength ?? 0;
+      int receivedBytes = 0;
+
+      final backupDirPath = await DatabaseHelper.instance.getBackupsDirectoryPath();
+      final targetFile = File(join(backupDirPath, filename));
+      final sink = targetFile.openWrite();
+
+      await for (final chunk in streamedResponse.stream) {
+        sink.add(chunk);
+        receivedBytes += chunk.length;
+        if (totalBytes > 0 && onProgress != null) {
+          onProgress(receivedBytes / totalBytes, receivedBytes, totalBytes);
+        }
+      }
+
+      await sink.flush();
+      await sink.close();
+
+      await loadBackups();
+      _isBackupBusy = false;
+      _backupMessage = 'Volcado completo ($filename) descargado exitosamente.';
+      notifyListeners();
+      return targetFile.path;
+    } catch (e) {
+      _isBackupBusy = false;
+      _backupMessage = 'Error descargando volcado .sql.gz: $e';
       notifyListeners();
       return null;
     }
@@ -259,6 +338,14 @@ class SettingsProvider with ChangeNotifier {
     notifyListeners();
 
     try {
+      if (path.endsWith('.sql.gz')) {
+        final filename = path.split(Platform.pathSeparator).last;
+        _isBackupBusy = false;
+        _backupMessage = 'El archivo "$filename" es un volcado físico de TimescaleDB (7.5M+ velas). Para restaurarlo en el servidor, ejecuta en tu terminal SSH:\ngunzip -c $filename | docker compose exec -T timescaledb psql -U cryptoview -d cryptoview_db';
+        notifyListeners();
+        return false;
+      }
+
       if (path.endsWith('.json.gz') || path.endsWith('.json')) {
         final bytes = await File(path).readAsBytes();
 

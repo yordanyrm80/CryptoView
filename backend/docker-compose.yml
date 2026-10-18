@@ -35,6 +35,13 @@ services:
       - "127.0.0.1:8000:8000"
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-cryptoview}:${POSTGRES_PASSWORD:-cryptoview_secure_pwd}@timescaledb:5432/${POSTGRES_DB:-cryptoview_db}
+      - POSTGRES_USER=${POSTGRES_USER:-cryptoview}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-cryptoview_secure_pwd}
+      - POSTGRES_DB=${POSTGRES_DB:-cryptoview_db}
+      - POSTGRES_HOST=timescaledb
+      - POSTGRES_PORT=5432
+    volumes:
+      - backups_data:/app/backups
 
   # 3. Motor de Ingestión 24/7 (Worker)
   worker:
@@ -67,6 +74,8 @@ services:
 
 volumes:
   pgdata:
+    driver: local
+  backups_data:
     driver: local
   caddy_data:
     driver: local

@@ -1,8 +1,12 @@
+import os
 import gzip
 import json
+import asyncio
+from pathlib import Path
 from datetime import datetime, timezone
-from typing import Dict, Any
+from typing import Dict, Any, List
 from fastapi import APIRouter, Depends, Query, Response, Request, HTTPException
+from fastapi.responses import FileResponse
 
 from app.database import get_db_pool
 from app.auth import verify_api_key
@@ -219,4 +223,180 @@ async def restore_database_backup(request: Request):
         "message": "Respaldo restaurado exitosamente en la base de datos.",
         "restored_counts": restored_counts,
     }
+
+
+# =========================================================================
+# VOLCADO COMPLETO NATIVO TIMESCALEDB (PG_DUMP + GZIP STREAMING)
+# =========================================================================
+
+BACKUPS_DIR = Path("/app/backups")
+if not BACKUPS_DIR.exists():
+    try:
+        BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        BACKUPS_DIR = Path("./backups")
+        BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
+
+_dump_lock = asyncio.Lock()
+_current_dump_status: Dict[str, Any] = {
+    "is_running": False,
+    "started_at": None,
+    "elapsed_seconds": 0,
+    "last_error": None,
+    "last_completed_file": None,
+}
+
+
+async def _execute_pg_dump_async(filename: str):
+    global _current_dump_status
+    filepath = BACKUPS_DIR / filename
+    temp_filepath = BACKUPS_DIR / f"{filename}.tmp"
+
+    db_user = os.getenv("POSTGRES_USER", "cryptoview")
+    db_pass = os.getenv("POSTGRES_PASSWORD", "cryptoview_secure_pwd")
+    db_name = os.getenv("POSTGRES_DB", "cryptoview_db")
+    db_host = os.getenv("POSTGRES_HOST", "timescaledb" if os.path.exists("/.dockerenv") else "127.0.0.1")
+    db_port = os.getenv("POSTGRES_PORT", "5432")
+
+    env = os.environ.copy()
+    env["PGPASSWORD"] = db_pass
+
+    cmd = (
+        f"pg_dump -h {db_host} -p {db_port} -U {db_user} -d {db_name} "
+        f"--no-owner --no-privileges | gzip -9 > \"{temp_filepath}\""
+    )
+
+    try:
+        process = await asyncio.create_subprocess_shell(
+            cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env
+        )
+        stdout, stderr = await process.communicate()
+
+        if process.returncode == 0 and temp_filepath.exists() and temp_filepath.stat().st_size > 0:
+            if filepath.exists():
+                filepath.unlink()
+            temp_filepath.rename(filepath)
+            _current_dump_status["last_completed_file"] = filename
+            _current_dump_status["last_error"] = None
+        else:
+            err = stderr.decode() if stderr else f"Exit code {process.returncode}"
+            _current_dump_status["last_error"] = err
+            if temp_filepath.exists():
+                temp_filepath.unlink()
+    except Exception as e:
+        _current_dump_status["last_error"] = str(e)
+        if temp_filepath.exists():
+            try:
+                temp_filepath.unlink()
+            except Exception:
+                pass
+    finally:
+        _current_dump_status["is_running"] = False
+
+
+@router.post("/pg_dump/create")
+async def create_pg_dump():
+    """
+    Inicia la generación asíncrona del volcado nativo (.sql.gz) de TimescaleDB
+    con todas las tablas y los más de 7.5 millones de velas sin bloquear memoria ni generar timeouts.
+    """
+    global _current_dump_status
+    if _current_dump_status["is_running"]:
+        return {
+            "status": "already_running",
+            "message": "Ya hay una tarea de volcado completo en ejecución.",
+            "started_at": _current_dump_status["started_at"].isoformat() if _current_dump_status["started_at"] else None,
+        }
+
+    now_utc = datetime.now(timezone.utc)
+    timestamp_str = now_utc.strftime("%Y-%m-%d_%H-%M-%S")
+    filename = f"cryptoview_timescaledb_full_{timestamp_str}.sql.gz"
+
+    _current_dump_status["is_running"] = True
+    _current_dump_status["started_at"] = now_utc
+    _current_dump_status["elapsed_seconds"] = 0
+    _current_dump_status["last_error"] = None
+
+    asyncio.create_task(_execute_pg_dump_async(filename))
+
+    return {
+        "status": "started",
+        "filename": filename,
+        "message": "Generando volcado nativo de TimescaleDB en el servidor...",
+        "started_at": now_utc.isoformat(),
+    }
+
+
+@router.get("/pg_dump/status")
+async def get_pg_dump_status():
+    """
+    Consulta el estado de generación y la lista de volcados .sql.gz disponibles en el servidor.
+    """
+    dumps = []
+    if BACKUPS_DIR.exists():
+        for f in BACKUPS_DIR.glob("*.sql.gz"):
+            stat = f.stat()
+            dumps.append({
+                "filename": f.name,
+                "size_bytes": stat.st_size,
+                "size_mb": round(stat.st_size / (1024 * 1024), 2),
+                "created_at_utc": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+            })
+    dumps.sort(key=lambda x: x["created_at_utc"], reverse=True)
+
+    status_data = dict(_current_dump_status)
+    if status_data["is_running"] and status_data["started_at"]:
+        status_data["elapsed_seconds"] = int((datetime.now(timezone.utc) - status_data["started_at"]).total_seconds())
+    if status_data["started_at"]:
+        status_data["started_at"] = status_data["started_at"].isoformat()
+
+    return {
+        "is_running": status_data["is_running"],
+        "elapsed_seconds": status_data.get("elapsed_seconds", 0),
+        "last_completed_file": status_data.get("last_completed_file"),
+        "last_error": status_data.get("last_error"),
+        "available_dumps": dumps,
+    }
+
+
+@router.get("/pg_dump/download/{filename}")
+async def download_pg_dump_file(filename: str):
+    """
+    Descarga por streaming con cabecera Content-Length el archivo .sql.gz generado.
+    """
+    safe_name = os.path.basename(filename)
+    filepath = BACKUPS_DIR / safe_name
+
+    if not filepath.exists() or not filepath.is_file():
+        raise HTTPException(status_code=404, detail="Archivo de volcado no encontrado en el servidor.")
+
+    file_size = filepath.stat().st_size
+    return FileResponse(
+        path=str(filepath),
+        filename=safe_name,
+        media_type="application/gzip",
+        headers={
+            "Content-Length": str(file_size),
+            "Content-Disposition": f'attachment; filename="{safe_name}"'
+        }
+    )
+
+
+@router.delete("/pg_dump/{filename}")
+async def delete_pg_dump_file(filename: str):
+    """
+    Elimina un archivo .sql.gz del servidor para liberar almacenamiento.
+    """
+    safe_name = os.path.basename(filename)
+    filepath = BACKUPS_DIR / safe_name
+
+    if filepath.exists() and filepath.is_file():
+        filepath.unlink()
+        return {"status": "ok", "message": f"Archivo {safe_name} eliminado del servidor."}
+
+    raise HTTPException(status_code=404, detail="Archivo no encontrado.")
+
 

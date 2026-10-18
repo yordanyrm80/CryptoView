@@ -706,7 +706,7 @@ class DatabaseHelper {
     final entities = await dir.list().toList();
     final files = entities
         .whereType<File>()
-        .where((f) => f.path.endsWith('.db') || f.path.endsWith('.json.gz'))
+        .where((f) => f.path.endsWith('.db') || f.path.endsWith('.json.gz') || f.path.endsWith('.sql.gz'))
         .toList();
     files.sort((a, b) {
       try {
