@@ -2,6 +2,7 @@ import asyncio
 import logging
 from typing import List, Optional
 from src.core.event_bus import DomainEvent, EventBus
+from src.data_provider import MarketDataProvider, get_market_data_provider
 from src.exchange.client import KuCoinClient
 from src.exchange.cryptoview_client import CryptoViewClient
 from src.storage.candle_repository import CandleRepository
@@ -13,8 +14,9 @@ logger = logging.getLogger("criptobot.ingestor")
 class MarketDataIngestor:
     """Dedicated market data ingestion worker.
 
-    Responsible exclusively for polling live OHLCV data from CryptoView Data Engine
-    (with automatic fallback to KuCoin CCXT if needed) and persisting it into PostgreSQL.
+    Responsible exclusively for polling live OHLCV data via MarketDataProvider
+    (Direct TimescaleDB when local or CryptoView REST API when remote)
+    and persisting it into the bot repository.
     Completely decouples data acquisition from trading decision and order execution logic.
     """
 
@@ -22,6 +24,7 @@ class MarketDataIngestor:
         self,
         db_manager: Optional[DatabaseManager] = None,
         candle_repo: Optional[CandleRepository] = None,
+        data_provider: Optional[MarketDataProvider] = None,
         cryptoview_client: Optional[CryptoViewClient] = None,
         kucoin_client: Optional[KuCoinClient] = None,
         event_bus: Optional[EventBus] = None,
@@ -32,8 +35,15 @@ class MarketDataIngestor:
     ):
         self.db_manager = db_manager or DatabaseManager()
         self.candle_repo = candle_repo or CandleRepository(self.db_manager)
-        self.cryptoview_client = cryptoview_client or CryptoViewClient()
-        self.kucoin_client = kucoin_client or KuCoinClient()
+        if data_provider is not None:
+            self.data_provider = data_provider
+        elif cryptoview_client is not None:
+            from src.data_provider.api_provider import ApiMarketDataProvider
+            self.data_provider = ApiMarketDataProvider(client=cryptoview_client)
+        else:
+            self.data_provider = get_market_data_provider()
+        self.cryptoview_client = getattr(self.data_provider, "client", cryptoview_client)
+        self.kucoin_client = kucoin_client
         self.event_bus = event_bus or EventBus.get_instance()
         self.symbols = symbols or ["BTC/USDT"]
         self.poll_interval_seconds = poll_interval_seconds
@@ -54,7 +64,9 @@ class MarketDataIngestor:
             return
         self._running = True
         self._task = asyncio.create_task(self._loop())
-        logger.info(f"MarketDataIngestor started for symbols: {', '.join(self.symbols)} (CryptoView API: {self.use_cryptoview})")
+        logger.info(
+            f"MarketDataIngestor started for symbols: {', '.join(self.symbols)} (Provider: {self.data_provider.__class__.__name__})"
+        )
 
     def stop(self) -> None:
         """Stops background ingestion loop."""
@@ -64,35 +76,17 @@ class MarketDataIngestor:
         logger.info("MarketDataIngestor stopped.")
 
     async def sync_once(self) -> int:
-        """Performs a single fetch and upsert cycle across all active symbols."""
+        """Performs a single fetch and upsert cycle across all active symbols via MarketDataProvider."""
         total_saved = 0
-        loop = asyncio.get_running_loop()
 
         for symbol in list(self.symbols):
             try:
-                candles = None
-
-                # 1. Primary: Fetch high-speed aggregated candles from CryptoView Cloud API
-                if self.use_cryptoview:
-                    try:
-                        candles = await self.cryptoview_client.fetch_candles(
-                            symbol=symbol,
-                            timeframe="1h",
-                            exchange=self.exchange,
-                            limit=5,
-                            auto_track=True,
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            f"MarketDataIngestor: CryptoView API error for {symbol} ({e}), falling back to KuCoin CCXT..."
-                        )
-
-                # 2. Fallback: Query KuCoin CCXT directly if CryptoView returned no candles or failed
-                if not candles and self.kucoin_client:
-                    candles = await loop.run_in_executor(
-                        None,
-                        lambda s=symbol: self.kucoin_client.fetch_ohlcv(s, timeframe="1h", limit=5),
-                    )
+                candles = await self.data_provider.get_candles(
+                    symbol=symbol,
+                    timeframe="1h",
+                    exchange=self.exchange,
+                    limit=5,
+                )
 
                 if candles:
                     saved = self.candle_repo.save_candles(candles)

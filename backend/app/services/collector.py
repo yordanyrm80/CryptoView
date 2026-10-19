@@ -1,5 +1,7 @@
 import asyncio
-from datetime import datetime, timezone
+import json
+import time
+from datetime import datetime, timezone, timedelta
 from app.config import settings
 from app.database import init_db_pool, close_db_pool
 from app.services.exchange_client import ExchangeClient
@@ -148,15 +150,11 @@ async def sync_symbol_backward(client: ExchangeClient, pool, exchange: str, symb
     if candles:
         saved_count = await save_candles(pool, exchange, symbol, candles)
         # Refrescar vistas continuas (1d, 1h, 5m) en segundo plano sin bloquear el bucle de ingesta
-        from datetime import timedelta
         win_start = candles[0]['time'] - timedelta(days=1)
         win_end = candles[-1]['time'] + timedelta(days=1)
         asyncio.create_task(refresh_aggregates_window(pool, win_start, win_end))
         new_oldest = candles[0]['time'].strftime('%Y-%m-%d %H:%M UTC')
         print(f"[{now_utc}] ⏪ BACKFILL {exchange.upper()} {symbol}: +{saved_count} velas antiguas guardadas (Historial ya llega hasta {new_oldest}).")
-
-import json
-import time
 
 async def update_worker_heartbeat(pool, details: dict):
     """Actualiza la marca de latido del worker en system_heartbeat para monitoreo en vivo."""

@@ -1,14 +1,15 @@
-from typing import List, Optional
+from typing import Any, List, Optional
 import pandas as pd
 from src.domain.models import Candle
 from src.storage.database import DatabaseManager
 
 
 class CandleRepository:
-    """Repository for storing and querying OHLCV candles in PostgreSQL."""
+    """Repository for storing and querying OHLCV candles in PostgreSQL or via MarketDataProvider."""
 
-    def __init__(self, db_manager: DatabaseManager):
+    def __init__(self, db_manager: DatabaseManager, data_provider: Optional[Any] = None):
         self.db_manager = db_manager
+        self._data_provider = data_provider
 
     def save_candles(self, candles: List[Candle]) -> int:
         """Stores a batch of candles, ignoring duplicates."""
@@ -77,19 +78,37 @@ class CandleRepository:
 
         with self.db_manager.get_connection() as conn:
             rows = conn.execute(query, params).fetchall()
-            return [
-                Candle(
-                    symbol=r["symbol"],
-                    timeframe=r["timeframe"],
-                    timestamp=r["timestamp"],
-                    open=r["open"],
-                    high=r["high"],
-                    low=r["low"],
-                    close=r["close"],
-                    volume=r["volume"],
+            if rows:
+                return [
+                    Candle(
+                        symbol=r["symbol"],
+                        timeframe=r["timeframe"],
+                        timestamp=r["timestamp"],
+                        open=r["open"],
+                        high=r["high"],
+                        low=r["low"],
+                        close=r["close"],
+                        volume=r["volume"],
+                    )
+                    for r in rows
+                ]
+
+        if self._data_provider is not None:
+            try:
+                fetched = self._data_provider.get_candles_sync(
+                    symbol=symbol,
+                    timeframe=timeframe,
+                    limit=limit or 500,
+                    start_time_ms=start_time,
+                    end_time_ms=end_time,
                 )
-                for r in rows
-            ]
+                if fetched:
+                    self.save_candles(fetched)
+                    return fetched
+            except Exception:
+                pass
+
+        return []
 
     def get_candles_df(
         self,

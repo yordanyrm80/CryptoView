@@ -29,6 +29,8 @@ TIME_BUCKET_MAP = {
     "1w": "1 week",
 }
 
+_known_tracked_symbols: set = set()
+
 @router.get("/tickers", response_model=List[Dict[str, Any]])
 async def get_live_tickers():
     """
@@ -88,14 +90,15 @@ async def get_candles(
     ex = exchange.lower().strip()
     norm_interval = interval.lower().strip()
 
-    # Si auto_track está activado, asegurar que el par quede registrado en tracked_symbols
-    if auto_track:
+    # Si auto_track está activado, asegurar que el par quede registrado en tracked_symbols (con caché en memoria)
+    if auto_track and (ex, norm_symbol) not in _known_tracked_symbols:
         async with pool.acquire() as conn:
             await conn.execute("""
                 INSERT INTO tracked_symbols (exchange, symbol, is_active)
                 VALUES ($1, $2, TRUE)
                 ON CONFLICT (exchange, symbol) DO NOTHING;
             """, ex, norm_symbol)
+        _known_tracked_symbols.add((ex, norm_symbol))
 
     params = [ex, norm_symbol]
 
