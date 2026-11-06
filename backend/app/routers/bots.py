@@ -8,7 +8,8 @@ from pydantic import BaseModel, Field
 from app.database import get_db_pool
 from app.auth import verify_api_key
 from app.services.bot_supervisor import DEFAULT_DISCORD_WEBHOOK_URL, send_discord_bot_embed
-from app.services.crypto import encrypt_secret
+import ccxt.async_support as ccxt
+from app.services.crypto import encrypt_secret, decrypt_secret
 
 router = APIRouter(
     prefix="/api/v1",
@@ -1338,3 +1339,117 @@ async def delete_bot(bot_id: str):
             await conn.execute("DELETE FROM bots WHERE bot_id = $1;", bot_id)
 
         return {"deleted": True, "bot_id": bot_id, "message": f"Bot '{bot_id}' eliminado correctamente."}
+
+
+class UpdateExchangeProxyIn(BaseModel):
+    proxy_url: str = Field(..., description="URL completa del proxy, ej. http://usuario:clave@ip:puerto")
+    enabled: bool = True
+    country: Optional[str] = "Germany"
+
+
+@router.get("/bots-settings/proxy")
+async def get_exchange_proxy():
+    """Devuelve el estado del proxy saliente para exchanges configurado en la base de datos."""
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        await _ensure_bot_tables(conn)
+        row = await conn.fetchrow("SELECT value_json, updated_at FROM system_settings WHERE key = 'exchange_proxy';")
+        if not row:
+            return {"configured": False, "enabled": False, "proxy_url": None, "country": None}
+        raw = row["value_json"]
+        data = json.loads(raw) if isinstance(raw, str) else raw
+        raw_url = data.get("proxy_url") or ""
+        decrypted = decrypt_secret(raw_url) or raw_url
+        
+        # Enmascarar credenciales para la respuesta UI
+        masked = None
+        if decrypted and "@" in decrypted:
+            proto, rest = decrypted.split("://", 1) if "://" in decrypted else ("http", decrypted)
+            creds, host = rest.split("@", 1)
+            masked = f"{proto}://***:***@{host}"
+        elif decrypted:
+            masked = decrypted
+
+        return {
+            "configured": bool(decrypted),
+            "enabled": bool(data.get("enabled", True)),
+            "masked_url": masked,
+            "ip": data.get("ip"),
+            "port": data.get("port"),
+            "country": data.get("country", "Germany"),
+            "updated_at": row["updated_at"]
+        }
+
+
+@router.put("/bots-settings/proxy")
+async def update_exchange_proxy(req: UpdateExchangeProxyIn):
+    """Guarda y encripta (AES-256) el proxy saliente para exchanges en la base de datos."""
+    clean_url = req.proxy_url.strip()
+    if req.enabled and not clean_url:
+        raise HTTPException(status_code=400, detail="Debes proporcionar una URL válida de proxy (http://user:pass@ip:port).")
+
+    pool = await get_db_pool()
+    async with pool.acquire() as conn:
+        await _ensure_bot_tables(conn)
+        now_ms = int(time.time() * 1000)
+        
+        ip_extracted = None
+        port_extracted = None
+        if "@" in clean_url:
+            host_part = clean_url.split("@")[-1]
+            if ":" in host_part:
+                ip_extracted, port_extracted = host_part.split(":", 1)
+                port_extracted = int(port_extracted.split("/")[0]) if port_extracted else None
+
+        payload = {
+            "proxy_url": encrypt_secret(clean_url) if clean_url else "",
+            "enabled": req.enabled,
+            "ip": ip_extracted,
+            "port": port_extracted,
+            "country": req.country or "Germany",
+            "updated_at": now_ms
+        }
+        await conn.execute("""
+            INSERT INTO system_settings (key, value_json, updated_at)
+            VALUES ('exchange_proxy', $1, $2)
+            ON CONFLICT (key) DO UPDATE
+            SET value_json = EXCLUDED.value_json,
+                updated_at = EXCLUDED.updated_at;
+        """, json.dumps(payload), now_ms)
+
+        return {"success": True, "message": "Proxy guardado y cifrado en base de datos correctamente.", "enabled": req.enabled}
+
+
+@router.post("/bots-settings/proxy/test")
+async def test_exchange_proxy_connection(req: UpdateExchangeProxyIn):
+    """Prueba la conectividad contra KuCoin a través del proxy proporcionado y mide latencia."""
+    clean_url = req.proxy_url.strip()
+    if not clean_url:
+        pool = await get_db_pool()
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow("SELECT value_json FROM system_settings WHERE key = 'exchange_proxy';")
+            if row:
+                data = json.loads(row["value_json"]) if isinstance(row["value_json"], str) else row["value_json"]
+                clean_url = decrypt_secret(data.get("proxy_url", "")) or data.get("proxy_url", "")
+
+    if not clean_url:
+        raise HTTPException(status_code=400, detail="No hay proxy configurado para probar.")
+
+    start_ts = time.time()
+    ex = ccxt.kucoin({
+        "enableRateLimit": True,
+        "aiohttp_proxy": clean_url,
+    })
+    try:
+        server_time = await ex.fetch_time()
+        latency_ms = int((time.time() - start_ts) * 1000)
+        return {
+            "success": True,
+            "latency_ms": latency_ms,
+            "server_time": server_time,
+            "message": f"Conexión exitosa con KuCoin a través del proxy ({latency_ms} ms)."
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Fallo de conexión al proxy hacia KuCoin: {e}")
+    finally:
+        await ex.close()

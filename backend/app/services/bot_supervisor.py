@@ -88,7 +88,28 @@ async def send_discord_bot_embed(
         return False
 
 
+async def _get_active_exchange_proxy(conn) -> Optional[str]:
+    """Retrieves and decrypts the active outbound proxy for exchange communication."""
+    try:
+        row = await conn.fetchrow("SELECT value_json FROM system_settings WHERE key = 'exchange_proxy';")
+        if not row or not row["value_json"]:
+            return getattr(settings, "KUCOIN_PROXY_URL", None) or None
+        raw = row["value_json"]
+        data = json.loads(raw) if isinstance(raw, str) else raw
+        if not data.get("enabled", True):
+            return None
+        proxy_raw = data.get("proxy_url")
+        if not proxy_raw:
+            return None
+        decrypted = decrypt_secret(proxy_raw) or proxy_raw
+        return decrypted.strip() if decrypted else None
+    except Exception as e:
+        print(f"[BotSupervisor Proxy Warning] Error al leer proxy de BD: {e}")
+        return getattr(settings, "KUCOIN_PROXY_URL", None) or None
+
+
 async def _execute_subaccount_market_order(
+    conn,
     cfg: Dict[str, Any],
     symbol: str,
     side: str,
@@ -106,12 +127,17 @@ async def _execute_subaccount_market_order(
     if not (api_key and api_secret and api_pass):
         raise ValueError("Missing dedicated subaccount credentials for LIVE execution.")
 
-    ex = ccxt.kucoin({
+    exchange_params = {
         "apiKey": api_key,
         "secret": api_secret,
         "password": api_pass,
         "enableRateLimit": True,
-    })
+    }
+    proxy_url = await _get_active_exchange_proxy(conn)
+    if proxy_url:
+        exchange_params["aiohttp_proxy"] = proxy_url
+
+    ex = ccxt.kucoin(exchange_params)
     try:
         await ex.load_markets()
         formatted_amount = float(ex.amount_to_precision(symbol, amount))
@@ -372,7 +398,7 @@ async def evaluate_running_bots(pool) -> int:
                     if not dry_run:
                         try:
                             order_res = await _execute_subaccount_market_order(
-                                cfg, symbol, "sell", tranche.amount
+                                conn, cfg, symbol, "sell", tranche.amount
                             )
                             if order_res and order_res.get("average"):
                                 exec_price = float(order_res["average"])
@@ -507,7 +533,7 @@ async def evaluate_running_bots(pool) -> int:
                     if not dry_run:
                         try:
                             order_res = await _execute_subaccount_market_order(
-                                cfg, symbol, "buy", amount
+                                conn, cfg, symbol, "buy", amount
                             )
                             if order_res and order_res.get("average"):
                                 exec_price = float(order_res["average"])
