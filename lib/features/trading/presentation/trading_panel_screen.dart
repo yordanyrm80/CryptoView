@@ -400,6 +400,24 @@ class _TradingPanelScreenState extends State<TradingPanelScreen> with AutomaticK
                   icon: Icons.token,
                   onChanged: tradingProvider.onAmountChanged,
                 ),
+                if (tradingProvider.currentRule != null) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4, left: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Mínimo: ${tradingProvider.currentRule!.minSize} ${tradingProvider.baseAsset}',
+                          style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
+                        ),
+                        Text(
+                          'Paso: ${tradingProvider.currentRule!.stepSize}',
+                          style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 12),
 
                 // 5. Total USDT Input

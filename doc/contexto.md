@@ -60,9 +60,26 @@ lib/
 │   │   │   └── tracker_screen.dart # Pantalla principal del diario (3 pestañas)
 │   │   └── providers/              # Gestor de estado del tracker y lógica de casamiento
 │   │
-│   └── exchanges/                  # 4. Gestión de Exchanges, Favoritas y Sincronización Masiva
-│       └── presentation/
-│           └── exchanges_screen.dart # Vista dedicada de configuración, saldo y batch sync
+│   ├── exchanges/                  # 4. Gestión de Exchanges, Favoritas y Sincronización Masiva
+│   │   └── presentation/
+│   │       └── exchanges_screen.dart # Vista dedicada de configuración, saldo y batch sync
+│   │
+│   └── bots/                       # 5. Gestión y Telemetría de Flota de Bots Cuantitativos
+│       ├── domain/bot_models.dart  # Modelos ResumenBot, TramoBot, MetricasFlotaBots
+│       ├── presentation/bots_workspace_screen.dart
+│       └── providers/bots_provider.dart # Consume únicamente CloudApiService.instance
+│
+├── bot/                            # CriptoBot: Motor de Trading Cuantitativo Institucional
+│   ├── src/
+│   │   ├── data_provider/          # Ingestión dual (TimescaleMarketDataProvider vs ApiMarketDataProvider)
+│   │   ├── strategies/             # Estrategias (Quantum Compound, Evolution, 3-Regime)
+│   │   ├── core/                   # Ejecutor en vivo y detector de régimen
+│   │   ├── domain/                 # Modelos canónicos (BotConfig, Tranche, Order, Candle)
+│   │   ├── exchange/               # Conector CCXT KuCoin Spot (ejecución y balance)
+│   │   ├── storage/                # Repositorios PostgreSQL / auditoría inmutable
+│   │   └── api/                    # API FastAPI de control y WebSockets
+│   ├── docs/                       # Manual Operativo Híbrido
+│   └── tests/                      # Suite de pruebas automatizadas pytest (43 tests)
 │
 └── main.dart                       # Inicialización, MultiProvider y Scaffold responsivo
 ```
@@ -151,9 +168,13 @@ lib/
    - Mitigación por fuerza bruta: bloqueo de IP de 5 min tras 5 fallos en 60s (auto-recuperable al presentar clave válida). Rate limit de 180 req/min.
 3. **`cryptoview-worker`** (`backend-worker`):
    - Demonio recolector 24/7 (`python -m app.services.collector`).
-   - Tiempo real hacia adelante, backfill progresivo hacia el pasado (round-robin) y auto-sync de trades cada 10 min.
-   - Registro de latido continuo en la tabla `system_heartbeat`.
-4. **`cryptoview-timescaledb`** (`timescale/timescaledb-ha:pg17`):
+   - Exclusivo para series temporales: tiempo real hacia adelante (1m), backfill progresivo hacia el pasado (round-robin) y auto-sync de trades cada 10 min.
+   - Registro de latido continuo independiente (`service_name = 'collector'`) en la tabla `system_heartbeat`.
+4. **`cryptoview-bot-supervisor`** (`backend-bot-supervisor`):
+   - Demonio supervisor cuantitativo 24/7 (`python -m app.services.bot_supervisor`).
+   - Completamente aislado del recolector de velas: evalúa estrategias multi-régimen, calcula indicadores en Pandas y enruta órdenes spot aisladas en KuCoin vía CCXT.
+   - Registro de latido continuo independiente (`service_name = 'bot_supervisor'`) en `system_heartbeat`.
+5. **`cryptoview-timescaledb`** (`timescale/timescaledb-ha:pg17`):
    - Puerto interno: `127.0.0.1:5432->5432/tcp`.
    - Volumen persistente: `pgdata`.
    - Hypertable `market_candles` (1m) y Continuous Aggregates (`candles_5m`, `candles_1h`).
@@ -173,12 +194,66 @@ lib/
   ```
 * **Reconstruir y levantar servicios en el servidor**:
   ```bash
-  ssh -i "C:\Users\yordany\.ssh\ssh-key-cryptoview-server.key" ubuntu@129.146.110.196 "cd /home/ubuntu/backend && docker compose build api worker && docker compose up -d api worker && docker exec cryptoview-caddy caddy reload --config /etc/caddy/Caddyfile"
+  ssh -i "C:\Users\yordany\.ssh\ssh-key-cryptoview-server.key" ubuntu@129.146.110.196 "cd /home/ubuntu/backend && docker compose build api worker bot-supervisor && docker compose up -d api worker bot-supervisor && docker exec cryptoview-caddy caddy reload --config /etc/caddy/Caddyfile"
   ```
 * **Ver logs en vivo**:
   ```bash
   docker logs -f cryptoview-worker
+  docker logs -f cryptoview-bot-supervisor
   docker logs -f cryptoview-api
   docker logs -f cryptoview-caddy
   ```
+
+---
+
+## 7. Sistema de Respaldo Dual (Cuenta vs Velas)
+
+1. **Salva Ligera de Cuenta & Trades (`.json.gz`)**:
+   - **Alcance**: Transacciones, notas, casamientos, claves cifradas y configuración de cuenta.
+   - **Tamaño y Duración**: `< 1 MB`, exportación y restauración atómica en `~1 segundo`.
+   - **Uso**: Ideal para sincronización entre dispositivos móviles y de escritorio sin transferir gigabytes de datos de mercado.
+   - **Endpoints**: `GET /api/v1/backup/export` y `POST /api/v1/backup/restore`.
+
+2. **Salva Completa con Velas de Mercado (`.sql.gz` nativo TimescaleDB)**:
+   - **Alcance**: Toda la base de datos PostgreSQL 17 (más de 7.67 millones de velas, hypertables `market_candles`, continuous aggregates `candles_5m`, `candles_1h`, índices, secuencias y auditoría).
+   - **Tamaño y Duración**: `~187 MB` comprimido al vuelo con `pg_dump | gzip` en background.
+   - **Descarga Streaming**: Vía `GET /api/v1/backup/pg_dump/download/{filename}` en chunks de 64KB sin saturar la memoria RAM.
+   - **Restauración en el Servidor VPS**:
+     ```bash
+     gunzip -c /home/ubuntu/backups/cryptoview_timescaledb_full_YYYY-MM-DD.sql.gz | docker compose -f /home/ubuntu/backend/docker-compose.yml exec -T timescaledb psql -U cryptoview -d cryptoview_db
+     ```
+
+---
+
+## 8. CriptoBot: Motor Cuantitativo y Proveedor Dual de Datos
+
+El motor algorítmico institucional (`bot/`) implementa una arquitectura desacoplada para la obtención de series temporales de mercado (`MarketDataProvider` en `bot/src/data_provider/`), seleccionable mediante la variable de entorno `DATA_SOURCE_MODE`:
+
+1. **`DATA_SOURCE_MODE=database`**:
+   - Conexión asíncrona directa (`asyncpg`) a TimescaleDB (`candles_1h`, `candles_5m`, `candles_1d`, `market_candles`).
+   - Latencia: `< 1 ms`.
+   - Aplicación: Despliegue en el mismo servidor VPS donde reside la base de datos central de CryptoView.
+
+2. **`DATA_SOURCE_MODE=api`**:
+   - Conexión HTTP/HTTPS autenticada contra la API de CryptoView (`GET /api/v1/candles` con cabecera `X-API-Key`) mediante `CryptoViewClient`.
+   - Aplicación: Despliegue en servidores remotos independientes (ej. PQ.Hosting VPS en Tokio) o en máquina local sin base de datos de velas.
+
+*Nota Institucional:* El bot ya no consulta a exchanges externos (KuCoin CCXT) para velas OHLCV; CCXT se reserva exclusivamente para la operativa spot y reconciliación de balances en subcuenta aislada.
+
+---
+
+## 9. Estrategia de Ramas y Flujo de Trabajo Git (Regla Obligatoria)
+
+1. **Rama Base de Integración**:
+   * La rama central activa del proyecto es **`develop`**. Ningún desarrollo se sube directamente a `main` sin validación previa.
+2. **Ciclo de Vida de Features**:
+   * Toda nueva funcionalidad, mejora o corrección algorítmica se desarrolla en una rama nombrada con convención: `feature/<nombre-descriptivo>`, creada a partir de `develop`.
+3. **Integración y Publicación**:
+   * Una vez completados y validados los cambios en la rama feature, se realiza el commit en dicha rama.
+   * A continuación, se cambia a `develop`, se hace merge de la rama feature (`git merge feature/<nombre-descriptivo>`) y se publica en el repositorio remoto mediante:
+     ```bash
+     git push origin develop
+     ```
+   * Nunca se deben dejar ramas huérfanas con cambios sin integrar a `develop`.
+
 

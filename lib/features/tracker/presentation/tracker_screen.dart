@@ -35,7 +35,10 @@ class _TrackerScreenState extends State<TrackerScreen> with SingleTickerProvider
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Provider.of<TrackerProvider>(context, listen: false).loadData();
+      final tracker = Provider.of<TrackerProvider>(context, listen: false);
+      tracker.loadData().then((_) {
+        tracker.autoSyncCurrentSymbol(lookbackDays: 3);
+      });
     });
   }
 
@@ -670,11 +673,11 @@ class _TrackerScreenState extends State<TrackerScreen> with SingleTickerProvider
             onPressed: _showApiConfigDialog,
           ),
           IconButton(
-            icon: (trackerProvider.isImporting || _isSyncing)
+            icon: (trackerProvider.isImporting || trackerProvider.isSilentSyncing || _isSyncing)
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary)))
                 : const Icon(Icons.cloud_sync_outlined),
-            tooltip: 'Sincronizar Historial vía API',
-            onPressed: (trackerProvider.isImporting || _isSyncing) ? null : _showSyncRangeDialog,
+            tooltip: trackerProvider.isSilentSyncing ? 'Sincronizando operaciones en segundo plano...' : 'Sincronizar Historial vía API',
+            onPressed: (trackerProvider.isImporting || trackerProvider.isSilentSyncing || _isSyncing) ? null : _showSyncRangeDialog,
           ),
         ],
         bottom: TabBar(
@@ -936,20 +939,6 @@ class _TrackerScreenState extends State<TrackerScreen> with SingleTickerProvider
                                     'Sincroniza desde la API o registra pagos de Amazon, Walmart, etc.',
                                     style: TextStyle(color: AppColors.textMuted, fontSize: 13),
                                   ),
-                                  if (trackerProvider.filterOnlyCurrentSymbol && trackerProvider.withdrawals.isNotEmpty) ...[
-                                    const SizedBox(height: 14),
-                                    OutlinedButton.icon(
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: AppColors.primary,
-                                        side: const BorderSide(color: AppColors.primary),
-                                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                      ),
-                                      onPressed: () => trackerProvider.setFilterOnlyCurrentSymbol(false),
-                                      icon: const Icon(Icons.visibility_outlined, size: 14),
-                                      label: Text('Ver todos los gastos (${trackerProvider.withdrawals.length})', style: const TextStyle(fontSize: 12)),
-                                    ),
-                                  ],
                                 ],
                               ),
                             )

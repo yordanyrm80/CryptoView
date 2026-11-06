@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../core/services/exchanges/exchange_service.dart';
+import '../../../core/services/exchanges/symbol_trading_rule.dart';
 import '../../../core/database/database_helper.dart';
 
 class OpenOrderItem {
@@ -42,6 +43,7 @@ class TradingProvider with ChangeNotifier {
   String? _statusMessage;
   bool _isSuccess = false;
   double? _lastMarketPrice;
+  SymbolTradingRule? _currentRule;
 
   final TextEditingController priceController = TextEditingController();
   final TextEditingController amountController = TextEditingController();
@@ -65,6 +67,7 @@ class TradingProvider with ChangeNotifier {
   List<OpenOrderItem> get openOrders => _openOrders;
   String get currentExchange => _currentExchange;
   String get currentSymbol => _currentSymbol;
+  SymbolTradingRule? get currentRule => _currentRule;
 
   String get baseAsset {
     final parts = _currentSymbol.replaceAll('-', '/').split('/');
@@ -88,15 +91,30 @@ class TradingProvider with ChangeNotifier {
 
     if (needsRefresh) {
       _isInitialized = true;
+      _loadSymbolRules();
       if (marketPrice != null && marketPrice > 0) {
         if (priceController.text.isEmpty || symbolChanged || double.tryParse(priceController.text) == 0.0) {
-          priceController.text = marketPrice.toStringAsFixed(marketPrice < 1.0 ? 4 : 2);
+          final priceDecs = _currentRule?.priceDecimals ?? (marketPrice < 1.0 ? 4 : 2);
+          priceController.text = marketPrice.toStringAsFixed(priceDecs);
           onPriceChanged(priceController.text);
         }
       }
       loadBalances();
       loadOpenOrders();
       _startOrdersPolling();
+    }
+  }
+
+  Future<void> _loadSymbolRules() async {
+    try {
+      final rule = await _exchangeService.fetchSymbolRules(_currentExchange, _currentSymbol);
+      _currentRule = rule;
+      if (_lastMarketPrice != null && _lastMarketPrice! > 0 && priceController.text.isEmpty) {
+        priceController.text = _lastMarketPrice!.toStringAsFixed(rule.priceDecimals);
+      }
+      notifyListeners();
+    } catch (_) {
+      // Ignored
     }
   }
 
@@ -136,7 +154,8 @@ class TradingProvider with ChangeNotifier {
     if (side != null) {
       _isBuy = side.toLowerCase() == 'buy';
     }
-    priceController.text = price.toStringAsFixed(price < 1.0 ? 4 : 2);
+    final priceDecs = _currentRule?.priceDecimals ?? (price < 1.0 ? 4 : 2);
+    priceController.text = price.toStringAsFixed(priceDecs);
     onPriceChanged(priceController.text);
     notifyListeners();
   }
@@ -163,7 +182,12 @@ class TradingProvider with ChangeNotifier {
     final total = double.tryParse(val) ?? 0.0;
     final price = double.tryParse(priceController.text) ?? 0.0;
     if (price > 0 && total >= 0) {
-      amountController.text = (total / price).toStringAsFixed(6);
+      final rawAmt = total / price;
+      if (_currentRule != null) {
+        amountController.text = _currentRule!.formatSizeString(rawAmt);
+      } else {
+        amountController.text = rawAmt.toStringAsFixed(4);
+      }
     }
     notifyListeners();
   }
@@ -179,13 +203,23 @@ class TradingProvider with ChangeNotifier {
       final total = _availableUSDT * pct;
       totalController.text = total.toStringAsFixed(2);
       if (price > 0) {
-        amountController.text = (total / price).toStringAsFixed(6);
+        final rawAmt = total / price;
+        if (_currentRule != null) {
+          amountController.text = _currentRule!.formatSizeString(rawAmt);
+        } else {
+          amountController.text = rawAmt.toStringAsFixed(4);
+        }
       }
     } else {
-      final amt = _availableCrypto * pct;
-      amountController.text = amt.toStringAsFixed(6);
+      final rawAmt = _availableCrypto * pct;
+      if (_currentRule != null) {
+        amountController.text = _currentRule!.formatSizeString(rawAmt);
+      } else {
+        amountController.text = rawAmt.toStringAsFixed(4);
+      }
+      final parsedAmt = double.tryParse(amountController.text) ?? 0.0;
       if (price > 0) {
-        totalController.text = (amt * price).toStringAsFixed(2);
+        totalController.text = (parsedAmt * price).toStringAsFixed(2);
       }
     }
     notifyListeners();

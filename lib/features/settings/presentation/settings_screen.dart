@@ -10,6 +10,8 @@ import '../../tracker/providers/tracker_provider.dart';
 import '../../watchlist/providers/watchlist_provider.dart';
 import '../../chart/providers/chart_provider.dart';
 import '../../../core/services/cloud_api_service.dart';
+import 'widgets/cloud_server_config_section.dart';
+import 'widgets/pg_dump_modal_dialog.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -263,13 +265,13 @@ class SettingsScreen extends StatelessWidget {
 
     String statusLabel;
     if (daysSince == null) {
-      statusLabel = 'Aún no has descargado ninguna salva mensual';
+      statusLabel = 'Aún no se ha registrado ningún respaldo periódico';
     } else if (daysSince == 0) {
-      statusLabel = 'Última salva realizada: Hoy';
+      statusLabel = 'Último respaldo generado: Hoy';
     } else if (daysSince == 1) {
-      statusLabel = 'Última salva realizada: Hace 1 día';
+      statusLabel = 'Último respaldo generado: Hace 1 día';
     } else {
-      statusLabel = 'Última salva realizada: Hace $daysSince días';
+      statusLabel = 'Último respaldo generado: Hace $daysSince días';
     }
 
     return Container(
@@ -301,12 +303,12 @@ class SettingsScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Copias de Seguridad (Local & Servidor Cloud)',
+                      'Centro de Respaldos y Recuperación de Datos',
                       style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
                     ),
                     SizedBox(height: 2),
                     Text(
-                      'Guarda y restaura salvas manuales de tu base de datos local y del servidor de Oracle Cloud',
+                      'Exporta y restaura copias de seguridad de tu historial operativo, configuraciones y series de mercado',
                       style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
                     ),
                   ],
@@ -341,8 +343,8 @@ class SettingsScreen extends StatelessWidget {
                 Expanded(
                   child: Text(
                     isOverdue
-                        ? '$statusLabel · Recomendado hacer una salva mensual.'
-                        : '$statusLabel · Respaldo al día (ciclo de 30 días).',
+                        ? '$statusLabel · Se recomienda generar un respaldo mensual.'
+                        : '$statusLabel · Ciclo de respaldo al día (30 días).',
                     style: TextStyle(
                       color: isOverdue ? Colors.amber : AppColors.bull,
                       fontSize: 12,
@@ -358,7 +360,7 @@ class SettingsScreen extends StatelessWidget {
             spacing: 10,
             runSpacing: 10,
             children: [
-              // 1. Salva Ligera de Cuenta & Trades (.json.gz)
+              // 1. Respaldo de Cuenta & Operaciones (.json.gz)
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.bull,
@@ -376,8 +378,8 @@ class SettingsScreen extends StatelessWidget {
                               backgroundColor: path != null ? AppColors.bull : AppColors.bear,
                               content: Text(
                                 path != null
-                                    ? 'Salva de Cuenta & Trades (.json.gz) guardada con éxito en tu PC.'
-                                    : (settingsProvider.backupMessage ?? 'Error descargando respaldo de cuenta.'),
+                                    ? 'Respaldo de cuenta y operaciones (.json.gz) almacenado correctamente.'
+                                    : (settingsProvider.backupMessage ?? 'Error al descargar el respaldo de cuenta.'),
                               ),
                             ),
                           );
@@ -387,11 +389,11 @@ class SettingsScreen extends StatelessWidget {
                     ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
                     : const Icon(Icons.bolt_rounded, size: 17, color: Colors.black),
                 label: const Text(
-                  'Salva Cuenta & Trades (.json.gz)',
+                  'Respaldo de Cuenta y Operaciones (.json.gz)',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                 ),
               ),
-              // 2. Salva Completa con Velas de Mercado (TimescaleDB .sql.gz)
+              // 2. Respaldo Integral con Series de Mercado (.sql.gz)
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF2563EB),
@@ -402,11 +404,11 @@ class SettingsScreen extends StatelessWidget {
                 onPressed: () => _showPgDumpModal(context, settingsProvider),
                 icon: const Icon(Icons.candlestick_chart_rounded, size: 17, color: Colors.white),
                 label: const Text(
-                  'Salva Completa con Velas (.sql.gz)',
+                  'Respaldo Integral con Series (.sql.gz)',
                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                 ),
               ),
-              // 3. Salva Solo Local SQLite (.db)
+              // 3. Respaldo Local SQLite (.db)
               OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.textPrimary,
@@ -424,8 +426,8 @@ class SettingsScreen extends StatelessWidget {
                               backgroundColor: path != null ? AppColors.bull : AppColors.bear,
                               content: Text(
                                 path != null
-                                    ? 'Copia de seguridad local (.db) guardada con éxito.'
-                                    : (settingsProvider.backupMessage ?? 'Error al crear salva.'),
+                                    ? 'Copia de seguridad local (.db) generada correctamente.'
+                                    : (settingsProvider.backupMessage ?? 'Error al generar copia local.'),
                               ),
                             ),
                           );
@@ -433,7 +435,7 @@ class SettingsScreen extends StatelessWidget {
                       },
                 icon: const Icon(Icons.storage_rounded, size: 16, color: Colors.orange),
                 label: const Text(
-                  'Salva Local (.db)',
+                  'Copia Local (.db)',
                   style: TextStyle(fontSize: 12),
                 ),
               ),
@@ -455,7 +457,7 @@ class SettingsScreen extends StatelessWidget {
           const Divider(color: AppColors.border, height: 1),
           const SizedBox(height: 12),
           Text(
-            'Salvas Disponibles (${backups.length}):',
+            'Respaldos Disponibles (${backups.length}):',
             style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 13),
           ),
           const SizedBox(height: 8),
@@ -469,7 +471,7 @@ class SettingsScreen extends StatelessWidget {
                 border: Border.all(color: AppColors.border.withValues(alpha: 0.5)),
               ),
               child: const Text(
-                'No hay copias de seguridad guardadas en la carpeta de respaldos. Pulsa "Salva Cuenta & Trades" o "Salva Completa" para generar una.',
+                'No existen archivos de respaldo en el directorio local. Selecciona una de las opciones superiores para generar el primero.',
                 style: TextStyle(color: AppColors.textMuted, fontSize: 12),
               ),
             )
@@ -590,7 +592,7 @@ class SettingsScreen extends StatelessWidget {
                       const SizedBox(width: 6),
                       IconButton(
                         icon: const Icon(Icons.delete_outline, color: AppColors.textMuted, size: 18),
-                        tooltip: 'Eliminar salva',
+                        tooltip: 'Eliminar respaldo',
                         onPressed: isBusy ? null : () => _confirmDeleteBackup(context, file, filename, settingsProvider),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
@@ -609,7 +611,7 @@ class SettingsScreen extends StatelessWidget {
     showDialog(
       context: context,
       barrierDismissible: true,
-      builder: (ctx) => _PgDumpModalDialog(settingsProvider: settingsProvider),
+      builder: (ctx) => PgDumpModalDialog(settingsProvider: settingsProvider),
     );
   }
 
@@ -709,7 +711,7 @@ class SettingsScreen extends StatelessWidget {
           children: [
             Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 22),
             SizedBox(width: 8),
-            Text('Restaurar Salva', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
+            Text('Restaurar Copia de Seguridad', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
           ],
         ),
         content: Column(
@@ -733,7 +735,7 @@ class SettingsScreen extends StatelessWidget {
                 children: [
                   Text('Archivo: $filename', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
                   const SizedBox(height: 4),
-                  Text('Fecha de salva: $dateStr', style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+                  Text('Fecha de creación: $dateStr', style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
                 ],
               ),
             ),
@@ -805,7 +807,7 @@ class SettingsScreen extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           side: const BorderSide(color: AppColors.border),
         ),
-        title: const Text('Eliminar Salva', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
+        title: const Text('Eliminar Copia de Seguridad', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
         content: Text('¿Deseas eliminar permanentemente el archivo $filename?', style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
         actions: [
           TextButton(
@@ -1062,813 +1064,4 @@ class _DashedLinePainter extends CustomPainter {
 }
 
 
-class CloudServerConfigSection extends StatefulWidget {
-  const CloudServerConfigSection({super.key});
 
-  @override
-  State<CloudServerConfigSection> createState() => _CloudServerConfigSectionState();
-}
-
-class _CloudServerConfigSectionState extends State<CloudServerConfigSection> {
-  late TextEditingController _urlController;
-  late TextEditingController _tokenController;
-  bool _obscureToken = true;
-  bool _isTesting = false;
-  Map<String, dynamic>? _testResult;
-  String? _testErrorMessage;
-  bool _isDirty = false;
-
-  @override
-  void initState() {
-    super.initState();
-    final settings = Provider.of<SettingsProvider>(context, listen: false);
-    _urlController = TextEditingController(text: settings.cloudApiUrl);
-    _tokenController = TextEditingController(text: settings.cloudApiToken);
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (!_isDirty) {
-      final settings = Provider.of<SettingsProvider>(context);
-      if (_urlController.text != settings.cloudApiUrl) {
-        _urlController.text = settings.cloudApiUrl;
-      }
-      if (_tokenController.text != settings.cloudApiToken) {
-        _tokenController.text = settings.cloudApiToken;
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _urlController.dispose();
-    _tokenController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _runHealthTest() async {
-    setState(() {
-      _isTesting = true;
-      _testResult = null;
-      _testErrorMessage = null;
-    });
-
-    final res = await CloudApiService.instance.checkHealth(
-      testUrl: _urlController.text.trim(),
-      testToken: _tokenController.text.trim(),
-    );
-
-    if (!mounted) return;
-
-    setState(() {
-      _isTesting = false;
-      if (res['status'] == 'online') {
-        _testResult = res;
-      } else {
-        _testErrorMessage = res['message'] ?? 'Error de respuesta HTTP ${res['http_code'] ?? 'desconocido'}.';
-      }
-    });
-  }
-
-  Future<void> _saveSettings(SettingsProvider settings) async {
-    final cleanUrl = _urlController.text.trim().replaceAll(RegExp(r'/+$'), '');
-    final cleanToken = _tokenController.text.trim();
-
-    if (cleanUrl.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: AppColors.bear,
-          content: Text('La URL del servidor no puede estar vacía.'),
-        ),
-      );
-      return;
-    }
-
-    await settings.saveCloudApiCredentials(cleanUrl, cleanToken);
-    setState(() {
-      _isDirty = false;
-    });
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: AppColors.bull,
-          content: Text('Ajustes del Servidor Cloud guardados correctamente.'),
-        ),
-      );
-    }
-  }
-
-  void _restoreDefaults(SettingsProvider settings) {
-    setState(() {
-      _urlController.text = SettingsProvider.defaultCloudApiUrl;
-      _tokenController.text = SettingsProvider.defaultCloudApiToken;
-      _isDirty = true;
-      _testResult = null;
-      _testErrorMessage = null;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final settings = Provider.of<SettingsProvider>(context);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.cloud_sync_rounded, color: AppColors.primary, size: 24),
-              ),
-              const SizedBox(width: 14),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Servidor Cloud & Motor de Datos 24/7',
-                      style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 14),
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      'Conexión centralizada con TimescaleDB en Oracle Cloud (velas, órdenes y respaldos)',
-                      style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Campo URL del Servidor
-          const Text(
-            'URL del Servidor Cloud (HTTPS):',
-            style: TextStyle(color: AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 6),
-          TextFormField(
-            controller: _urlController,
-            style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontFamily: 'monospace'),
-            onChanged: (_) => setState(() => _isDirty = true),
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: AppColors.surface,
-              hintText: 'https://129-146-110-196.sslip.io',
-              hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 12),
-              prefixIcon: const Icon(Icons.dns_rounded, color: AppColors.primary, size: 18),
-              suffixIcon: IconButton(
-                icon: const Icon(Icons.restart_alt_rounded, color: AppColors.textMuted, size: 18),
-                tooltip: 'Restablecer URL por defecto',
-                onPressed: () {
-                  setState(() {
-                    _urlController.text = SettingsProvider.defaultCloudApiUrl;
-                    _isDirty = true;
-                  });
-                },
-              ),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.border)),
-              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.border)),
-              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.primary)),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // Campo Token de Acceso
-          const Text(
-            'Clave Secreta de Acceso (X-API-Key):',
-            style: TextStyle(color: AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 6),
-          TextFormField(
-            controller: _tokenController,
-            obscureText: _obscureToken,
-            style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontFamily: 'monospace'),
-            onChanged: (_) => setState(() => _isDirty = true),
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: AppColors.surface,
-              hintText: 'Token secreto de 256 bits...',
-              hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 12),
-              prefixIcon: const Icon(Icons.vpn_key_rounded, color: AppColors.primary, size: 18),
-              suffixIcon: IconButton(
-                icon: Icon(
-                  _obscureToken ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                  color: AppColors.textMuted,
-                  size: 18,
-                ),
-                tooltip: _obscureToken ? 'Mostrar token' : 'Ocultar token',
-                onPressed: () => setState(() => _obscureToken = !_obscureToken),
-              ),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.border)),
-              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.border)),
-              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppColors.primary)),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Botonera de acciones
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                onPressed: _isTesting ? null : _runHealthTest,
-                icon: _isTesting
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Icon(Icons.wifi_tethering_rounded, size: 16),
-                label: Text(
-                  _isTesting ? 'Probando...' : 'Probar Conexión',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                ),
-              ),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.bull,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                onPressed: () => _saveSettings(settings),
-                icon: const Icon(Icons.save_rounded, size: 16),
-                label: const Text(
-                  'Guardar Ajustes',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                ),
-              ),
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.textSecondary,
-                  side: const BorderSide(color: AppColors.border),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                onPressed: () => _restoreDefaults(settings),
-                icon: const Icon(Icons.restore_rounded, size: 16),
-                label: const Text('Restaurar Oficial', style: TextStyle(fontSize: 12)),
-              ),
-            ],
-          ),
-
-          // Caja de Diagnóstico / Estado en Vivo
-          if (_testResult != null || _testErrorMessage != null) ...[
-            const SizedBox(height: 14),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: _testResult != null
-                    ? AppColors.bull.withValues(alpha: 0.12)
-                    : AppColors.bear.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: _testResult != null
-                      ? AppColors.bull.withValues(alpha: 0.4)
-                      : AppColors.bear.withValues(alpha: 0.4),
-                ),
-              ),
-              child: _testResult != null
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.check_circle_rounded, color: AppColors.bull, size: 18),
-                            const SizedBox(width: 8),
-                            const Text(
-                              '¡Conexión Exitosa con el Servidor Cloud!',
-                              style: TextStyle(color: AppColors.bull, fontWeight: FontWeight.bold, fontSize: 13),
-                            ),
-                            const Spacer(),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: AppColors.bull.withValues(alpha: 0.25),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: const Text('ONLINE', style: TextStyle(color: AppColors.bull, fontSize: 10, fontWeight: FontWeight.bold)),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          '• Base de Datos: ${_testResult!['database'] ?? 'Conectada'}\n'
-                          '• Worker 24/7: ${_testResult!['worker_status'] ?? 'online'} (último reporte hace ${_testResult!['worker_last_seen_seconds'] ?? 0}s)\n'
-                          '• Monedas Monitoreadas: ${_testResult!['tracked_symbols_active'] ?? 0}\n'
-                          '• Velas en TimescaleDB: ${_testResult!['total_candles_stored'] ?? 0}\n'
-                          '• Órdenes Almacenadas: ${_testResult!['total_trades_stored'] ?? 0}',
-                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 12, height: 1.5),
-                        ),
-                      ],
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Row(
-                          children: [
-                            Icon(Icons.error_outline_rounded, color: AppColors.bear, size: 18),
-                            SizedBox(width: 8),
-                            Text(
-                              'Error de Conexión',
-                              style: TextStyle(color: AppColors.bear, fontWeight: FontWeight.bold, fontSize: 13),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'No fue posible comunicarse con el servidor:\n$_testErrorMessage\n\n'
-                          'Verifica que la URL empiece por https:// y que el token coincida con el servidor.',
-                          style: const TextStyle(color: AppColors.bear, fontSize: 12, height: 1.4),
-                        ),
-                      ],
-                    ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _PgDumpModalDialog extends StatefulWidget {
-  final SettingsProvider settingsProvider;
-
-  const _PgDumpModalDialog({required this.settingsProvider});
-
-  @override
-  State<_PgDumpModalDialog> createState() => _PgDumpModalDialogState();
-}
-
-class _PgDumpModalDialogState extends State<_PgDumpModalDialog> {
-  Timer? _pollingTimer;
-  bool _isLoading = true;
-  bool _isDownloading = false;
-  String? _downloadingFilename;
-  double _downloadProgress = 0.0;
-  int _downloadedBytes = 0;
-  int _totalBytes = 0;
-  String? _statusError;
-  Map<String, dynamic>? _statusData;
-
-  @override
-  void initState() {
-    super.initState();
-    _fetchStatus();
-  }
-
-  @override
-  void dispose() {
-    _pollingTimer?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _fetchStatus() async {
-    final status = await widget.settingsProvider.checkPgDumpStatus();
-    if (!mounted) return;
-    setState(() {
-      _isLoading = false;
-      _statusData = status;
-      if (status.containsKey('error')) {
-        _statusError = status['error'].toString();
-      } else {
-        _statusError = status['last_error'];
-      }
-    });
-
-    final isRunning = status['is_running'] == true;
-    if (isRunning) {
-      if (_pollingTimer == null || !_pollingTimer!.isActive) {
-        _pollingTimer?.cancel();
-        _pollingTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
-          _fetchStatus();
-        });
-      }
-    } else {
-      _pollingTimer?.cancel();
-      _pollingTimer = null;
-    }
-  }
-
-  Future<void> _triggerCreate() async {
-    setState(() {
-      _isLoading = true;
-      _statusError = null;
-    });
-    final res = await widget.settingsProvider.triggerPgDumpCreation();
-    if (!mounted) return;
-    if (res.containsKey('error')) {
-      setState(() {
-        _isLoading = false;
-        _statusError = res['error'].toString();
-      });
-    } else {
-      await _fetchStatus();
-    }
-  }
-
-  Future<void> _downloadFile(String filename) async {
-    setState(() {
-      _isDownloading = true;
-      _downloadingFilename = filename;
-      _downloadProgress = 0.0;
-      _downloadedBytes = 0;
-      _totalBytes = 0;
-    });
-
-    final savedPath = await widget.settingsProvider.downloadPgDumpFile(
-      filename,
-      onProgress: (progress, received, total) {
-        if (mounted) {
-          setState(() {
-            _downloadProgress = progress;
-            _downloadedBytes = received;
-            _totalBytes = total;
-          });
-        }
-      },
-    );
-
-    if (!mounted) return;
-    setState(() {
-      _isDownloading = false;
-      _downloadingFilename = null;
-    });
-
-    if (savedPath != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: AppColors.bull,
-          content: Text('¡Descarga completada! Guardado en: $savedPath'),
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: AppColors.bear,
-          content: Text(widget.settingsProvider.backupMessage ?? 'Error en la descarga del volcado.'),
-        ),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isRunning = _statusData?['is_running'] == true;
-    final elapsedSeconds = _statusData?['elapsed_seconds'] ?? 0;
-    final rawDumps = _statusData?['available_dumps'];
-    final List<dynamic> dumps = (rawDumps is List) ? rawDumps : [];
-
-    return AlertDialog(
-      backgroundColor: AppColors.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: const BorderSide(color: AppColors.border),
-      ),
-      titlePadding: const EdgeInsets.fromLTRB(20, 18, 16, 12),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-      actionsPadding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-      title: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.blueAccent.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(Icons.candlestick_chart_rounded, color: Colors.cyanAccent, size: 22),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Salva Completa con Velas',
-                  style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  'TimescaleDB pg_dump nativo (7.5M+ velas)',
-                  style: TextStyle(color: AppColors.textMuted, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.close, color: AppColors.textMuted, size: 20),
-            onPressed: () => Navigator.pop(context),
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
-        ],
-      ),
-      content: SizedBox(
-        width: 580,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.card,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.border.withValues(alpha: 0.6)),
-                ),
-                child: const Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.info_outline, color: Colors.cyanAccent, size: 18),
-                    SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Genera un volcado físico comprimido (.sql.gz) de PostgreSQL/TimescaleDB directamente en el VPS. '
-                        'No satura la memoria RAM de Python y captura los más de 7.5 millones de velas y todas las configuraciones.',
-                        style: TextStyle(color: AppColors.textSecondary, fontSize: 11.5, height: 1.4),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 14),
-
-              if (_statusError != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppColors.bear.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.bear.withValues(alpha: 0.5)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.error_outline, color: AppColors.bear, size: 18),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _statusError!,
-                          style: const TextStyle(color: AppColors.bear, fontSize: 11.5),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
-
-              if (_isLoading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 24),
-                  child: Center(
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.cyanAccent),
-                  ),
-                )
-              else if (isRunning) ...[
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.blueAccent.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.3)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.cyanAccent),
-                          ),
-                          const SizedBox(width: 10),
-                          const Text(
-                            'Generando volcado en el servidor...',
-                            style: TextStyle(color: Colors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 12.5),
-                          ),
-                          const Spacer(),
-                          Text(
-                            '${elapsedSeconds}s transcurridos',
-                            style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      const LinearProgressIndicator(
-                        backgroundColor: AppColors.surface,
-                        color: Colors.cyanAccent,
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'pg_dump se está ejecutando asíncronamente en el VPS. Toma ~25 a 40 segundos.',
-                        style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-              ],
-
-              if (_isDownloading) ...[
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppColors.bull.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppColors.bull.withValues(alpha: 0.3)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.downloading_rounded, color: AppColors.bull, size: 18),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Descargando: ${_downloadingFilename ?? ''}',
-                              style: const TextStyle(color: AppColors.bull, fontWeight: FontWeight.bold, fontSize: 12),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          Text(
-                            '${(_downloadProgress * 100).toStringAsFixed(1)}%',
-                            style: const TextStyle(color: AppColors.bull, fontWeight: FontWeight.bold, fontSize: 12),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      LinearProgressIndicator(
-                        value: _downloadProgress > 0 ? _downloadProgress : null,
-                        backgroundColor: AppColors.surface,
-                        color: AppColors.bull,
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        '${(_downloadedBytes / (1024 * 1024)).toStringAsFixed(1)} MB / ${(_totalBytes / (1024 * 1024)).toStringAsFixed(1)} MB recibidos',
-                        style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-              ],
-
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Volcados en el Servidor VPS (${dumps.length}):',
-                    style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 12.5),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.refresh, size: 16, color: AppColors.textSecondary),
-                    tooltip: 'Refrescar estado',
-                    onPressed: _fetchStatus,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-
-              if (dumps.isEmpty)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppColors.card,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.border.withValues(alpha: 0.4)),
-                  ),
-                  child: const Text(
-                    'No hay volcados generados en el servidor todavía. Pulsa el botón inferior para iniciar uno.',
-                    style: TextStyle(color: AppColors.textMuted, fontSize: 11.5),
-                  ),
-                )
-              else
-                ...dumps.map((d) {
-                  final filename = d['filename']?.toString() ?? '';
-                  final sizeMb = (d['size_mb'] as num?)?.toDouble() ?? 0.0;
-                  final createdAt = d['created_at_utc']?.toString() ?? '';
-                  String dateDisplay = createdAt;
-                  try {
-                    final dt = DateTime.parse(createdAt).toLocal();
-                    dateDisplay =
-                        '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-                  } catch (_) {}
-
-                  final isThisDownloading = _isDownloading && _downloadingFilename == filename;
-
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: AppColors.card,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.file_present_rounded, color: Colors.cyanAccent, size: 20),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                filename,
-                                style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 11.5),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '$dateDisplay · ${sizeMb.toStringAsFixed(1)} MB',
-                                style: const TextStyle(color: AppColors.textMuted, fontSize: 10.5),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blueAccent.withValues(alpha: 0.2),
-                            foregroundColor: Colors.cyanAccent,
-                            side: const BorderSide(color: Colors.cyanAccent, width: 0.8),
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-                            minimumSize: const Size(60, 30),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                          ),
-                          onPressed: (_isDownloading || isRunning) ? null : () => _downloadFile(filename),
-                          icon: isThisDownloading
-                              ? const SizedBox(
-                                  width: 12,
-                                  height: 12,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.cyanAccent),
-                                )
-                              : const Icon(Icons.cloud_download, size: 14),
-                          label: Text(
-                            isThisDownloading ? 'Bajando...' : 'Descargar',
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }),
-            ],
-          ),
-        ),
-      ),
-      actions: [
-        OutlinedButton.icon(
-          style: OutlinedButton.styleFrom(
-            foregroundColor: AppColors.textSecondary,
-            side: const BorderSide(color: AppColors.border),
-          ),
-          onPressed: () => widget.settingsProvider.openBackupsFolder(),
-          icon: const Icon(Icons.folder_open_outlined, size: 14),
-          label: const Text('Carpeta Local', style: TextStyle(fontSize: 12)),
-        ),
-        ElevatedButton.icon(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF2563EB),
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-          onPressed: (isRunning || _isDownloading) ? null : _triggerCreate,
-          icon: isRunning
-              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : const Icon(Icons.play_arrow_rounded, size: 16),
-          label: Text(
-            isRunning ? 'Generando en VPS...' : 'Generar Nuevo Volcado en Servidor',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-          ),
-        ),
-      ],
-    );
-  }
-}

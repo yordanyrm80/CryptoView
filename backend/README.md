@@ -38,7 +38,8 @@ Backend de ingestión 24/7 y almacén histórico de series temporales financiera
 * **Contenedores Activos**:
   * `cryptoview-caddy`: Proxy inverso HTTPS (`80:80`, `443:443`).
   * `cryptoview-api`: FastAPI / Uvicorn (`127.0.0.1:8000->8000`).
-  * `cryptoview-worker`: Demonio recolector continuo 24/7.
+  * `cryptoview-worker`: Demonio recolector continuo 24/7 (velas 1m y backfill).
+  * `cryptoview-bot-supervisor`: Supervisor y ejecutor de bots cuantitativos 24/7.
   * `cryptoview-timescaledb`: TimescaleDB / PostgreSQL 17 (`127.0.0.1:5432->5432`).
 
 ---
@@ -47,17 +48,21 @@ Backend de ingestión 24/7 y almacén histórico de series temporales financiera
 
 ### Actualizar código desde Windows:
 ```powershell
-scp -i "C:\Users\yordany\.ssh\ssh-key-cryptoview-server.key" -r backend/app backend/Caddyfile backend/sql ubuntu@129.146.110.196:/home/ubuntu/backend/
+scp -i "C:\Users\yordany\.ssh\ssh-key-cryptoview-server.key" -r backend/app backend/Caddyfile backend/sql backend/docker-compose.yml ubuntu@129.146.110.196:/home/ubuntu/backend/
 ```
 
 ### Reconstruir y reiniciar servicios en el servidor:
 ```bash
-ssh -i "C:\Users\yordany\.ssh\ssh-key-cryptoview-server.key" ubuntu@129.146.110.196 "cd /home/ubuntu/backend && docker compose build api worker && docker compose up -d api worker && docker exec cryptoview-caddy caddy reload --config /etc/caddy/Caddyfile"
+ssh -i "C:\Users\yordany\.ssh\ssh-key-cryptoview-server.key" ubuntu@129.146.110.196 "cd /home/ubuntu/backend && docker compose build api worker bot-supervisor && docker compose up -d api worker bot-supervisor && docker exec cryptoview-caddy caddy reload --config /etc/caddy/Caddyfile"
 ```
 
 ### Ver logs en vivo:
 ```bash
 # Ingestion Worker (recolección de velas y backfill)
+docker logs -f cryptoview-worker
+
+# Bot Supervisor (ejecución y evaluación de bots cuantitativos)
+docker logs -f cryptoview-bot-supervisor
 docker logs -f cryptoview-worker
 
 # Servidor API
@@ -121,14 +126,47 @@ docker logs -f cryptoview-caddy
 * **`GET /api/v1/matches`**:
   Consulta los casamientos de compra/venta y cálculo de ganancias cerradas.
 
-### 5. Respaldo Integral y Restauración
-* **`GET /api/v1/backup/export`**:
-  Genera un volcado completo de la base de datos (con o sin velas) en formato `.json` o comprimido `.json.gz`.
-* **`POST /api/v1/backup/restore`**:
-  Restaura atómicamente tablas de transacciones, retiros, casamientos, claves y símbolos a partir de un archivo `.json.gz`.
+### 5. Respaldo Integral y Restauración (Arquitectura Dual)
+* **A. Salva Ligera de Cuenta & Operaciones (`.json.gz`)**:
+  - `GET /api/v1/backup/export?include_candles=false`:
+    Genera un volcado atómico rápido (~1 segundo, <1 MB) con transacciones, retiros, casamientos, claves API cifradas y configuración de símbolos.
+  - `POST /api/v1/backup/restore`:
+    Restaura atómicamente el estado de la cuenta a partir del archivo `.json.gz` subido.
+* **B. Salva Completa con Velas de Mercado (`.sql.gz` nativo TimescaleDB)**:
+  - `POST /api/v1/backup/pg_dump/create`:
+    Inicia un volcado nativo en segundo plano mediante `pg_dump | gzip` comprimido al vuelo en el volumen seguro `backups_data`. Respalda el 100% de la base de datos (más de 7.67 millones de velas, hypertables y continuous aggregates).
+  - `GET /api/v1/backup/pg_dump/status`:
+    Monitorea el progreso del volcado en background (`idle`, `in_progress`, `completed`, `error`), devolviendo tamaño en bytes y duración.
+  - `GET /api/v1/backup/pg_dump/download/{filename}`:
+    Transfiere el archivo comprimido `.sql.gz` en streaming de alta velocidad mediante chunks de 64KB sin saturar la memoria RAM.
+  - `DELETE /api/v1/backup/pg_dump/{filename}`:
+    Elimina volcados antiguos del disco del servidor para preservar almacenamiento.
+
+#### 🔧 Restauración Manual del Volcado SQL Completo en Servidor VPS:
+```bash
+# Restaurar un volcado nativo .sql.gz en TimescaleDB (desde la carpeta ~/backups del VPS):
+gunzip -c /home/ubuntu/backups/cryptoview_timescaledb_full_YYYY-MM-DD.sql.gz | docker compose -f /home/ubuntu/backend/docker-compose.yml exec -T timescaledb psql -U cryptoview -d cryptoview_db
+```
 
 ### 6. Gestión de Credenciales y Monedas
 * **`GET /api/v1/keys`**, **`POST /api/v1/keys`**, **`DELETE /api/v1/keys/{exchange}`**:
   Gestión segura de credenciales de exchanges cifradas con AES-256.
 * **`GET /api/v1/symbols`**, **`POST /api/v1/symbols`**, **`DELETE /api/v1/symbols`**:
   Administración dinámica de monedas en seguimiento 24/7.
+
+### 7. Gestión Unificada de Flota de Bots Cuantitativos (`routers/bots.py`)
+* **`GET /api/v1/bots/metrics/overview`**:
+  Métricas consolidadas de toda la flota (patrimonio en bots, liquidez libre, beneficio realizado neto, win rate).
+* **`GET /api/v1/bots`**:
+  Listado completo de bots registrados en PostgreSQL con sus tramos activos, capital disponible y alertas de liquidez.
+* **`GET /api/v1/bots/{bot_id}/tranches`**:
+  Escalera de tramos abiertos y cerrados de un bot específico.
+* **`POST /api/v1/bots`**:
+  Registra una nueva instancia de bot cuantitativo en la base de datos central.
+* **`POST /api/v1/bots/{bot_id}/start|pause|resume|stop`**:
+  Transiciones de estado operativas sincronizadas vía PostgreSQL con el ejecutor de bots.
+* **`POST /api/v1/bots/{bot_id}/deposit|withdraw`**:
+  Inyección o retiro de liquidez auditado en la tabla `capital_transactions`.
+* **`GET / PUT /api/v1/bots/settings/notifications`**:
+  Configuración centralizada de alertas operativas por Webhook.
+

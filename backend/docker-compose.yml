@@ -57,7 +57,21 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-cryptoview}:${POSTGRES_PASSWORD:-cryptoview_secure_pwd}@timescaledb:5432/${POSTGRES_DB:-cryptoview_db}
 
-  # 4. Reverse Proxy HTTPS Seguro con Caddy (Let's Encrypt SSL automático)
+  # 4. Supervisor Cuantitativo de Bots 24/7 (Execution Engine Autónomo)
+  bot-supervisor:
+    build: .
+    container_name: cryptoview-bot-supervisor
+    restart: unless-stopped
+    command: python -m app.services.bot_supervisor
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-cryptoview}:${POSTGRES_PASSWORD:-cryptoview_secure_pwd}@timescaledb:5432/${POSTGRES_DB:-cryptoview_db}
+
+  # 5. Reverse Proxy HTTPS Seguro con Caddy (Let's Encrypt SSL automático)
   caddy:
     image: caddy:2-alpine
     container_name: cryptoview-caddy

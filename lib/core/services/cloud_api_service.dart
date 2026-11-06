@@ -7,8 +7,14 @@ class CloudApiService {
   static final CloudApiService instance = CloudApiService._init();
   CloudApiService._init();
 
-  String _baseUrl = 'https://129-146-110-196.sslip.io';
-  String _apiSecretToken = 'aa0d07ca7079caf19492d0fc4a762c593b3e02e205c669ae60de5cbbd66979c2';
+  String _baseUrl = const String.fromEnvironment(
+    'CLOUD_API_URL',
+    defaultValue: 'https://129-146-110-196.sslip.io',
+  );
+  String _apiSecretToken = const String.fromEnvironment(
+    'API_SECRET_TOKEN',
+    defaultValue: 'aa0d07ca7079caf19492d0fc4a762c593b3e02e205c669ae60de5cbbd66979c2',
+  );
 
   String get baseUrl => _baseUrl;
   String get apiSecretToken => _apiSecretToken;
@@ -286,5 +292,375 @@ class CloudApiService {
       debugPrint('[CloudApiService] Error en syncWithdrawals: $e');
     }
     return {'status': 'error', 'new_withdrawals_count': 0};
+  }
+
+  // ===========================================================================
+  // ENDPOINTS CENTRALIZADOS DE LA FLOTA DE BOTS (/api/v1/bots)
+  // ===========================================================================
+
+  /// Obtiene las métricas globales consolidadas de la flota de bots (`GET /api/v1/bots/metrics/overview`)
+  Future<Map<String, dynamic>?> fetchBotsOverview() async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/v1/bots/metrics/overview');
+      final response = await http
+          .get(uri, headers: _authHeaders)
+          .timeout(const Duration(seconds: 6));
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      debugPrint('[CloudApiService] Error en fetchBotsOverview: $e');
+    }
+    return null;
+  }
+
+  /// Obtiene el listado completo de bots registrados en PostgreSQL (`GET /api/v1/bots`)
+  Future<List<Map<String, dynamic>>?> fetchBots() async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/v1/bots');
+      final response = await http
+          .get(uri, headers: _authHeaders)
+          .timeout(const Duration(seconds: 6));
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        return data.cast<Map<String, dynamic>>();
+      }
+    } catch (e) {
+      debugPrint('[CloudApiService] Error en fetchBots: $e');
+    }
+    return null;
+  }
+
+  /// Obtiene los tramos (posiciones escalonadas) de un bot específico (`GET /api/v1/bots/{bot_id}/tranches`)
+  Future<List<Map<String, dynamic>>> fetchBotTranches(String botId) async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/v1/bots/$botId/tranches');
+      final response = await http
+          .get(uri, headers: _authHeaders)
+          .timeout(const Duration(seconds: 5));
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        return data.cast<Map<String, dynamic>>();
+      }
+    } catch (e) {
+      debugPrint('[CloudApiService] Error en fetchBotTranches ($botId): $e');
+    }
+    return [];
+  }
+
+  /// Obtiene las preferencias de notificaciones de la flota (`GET /api/v1/bots/settings/notifications`)
+  Future<Map<String, dynamic>?> fetchBotNotificationSettings() async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/v1/bots/settings/notifications');
+      final response = await http
+          .get(uri, headers: _authHeaders)
+          .timeout(const Duration(seconds: 5));
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      debugPrint('[CloudApiService] Error en fetchBotNotificationSettings: $e');
+    }
+    return null;
+  }
+
+  /// Actualiza las preferencias de notificaciones de la flota (`PUT /api/v1/bots/settings/notifications`)
+  Future<bool> updateBotNotificationSettings(
+    Map<String, dynamic> payload,
+  ) async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/v1/bots/settings/notifications');
+      final response = await http
+          .put(
+            uri,
+            headers: _authHeaders,
+            body: json.encode(payload),
+          )
+          .timeout(const Duration(seconds: 6));
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint('[CloudApiService] Error en updateBotNotificationSettings: $e');
+      return false;
+    }
+  }
+
+  /// Envía un mensaje de prueba al Webhook de Discord (`POST /api/v1/bots/settings/notifications/test`)
+  Future<bool> testBotNotificationSettings() async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/v1/bots/settings/notifications/test');
+      final response = await http
+          .post(uri, headers: _authHeaders)
+          .timeout(const Duration(seconds: 8));
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint('[CloudApiService] Error en testBotNotificationSettings: $e');
+      return false;
+    }
+  }
+
+  /// Ejecuta una transición de estado sobre un bot (`start`, `pause`, `resume`, `stop`)
+  Future<bool> postBotAction(String botId, String action) async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/v1/bots/$botId/$action');
+      final response = await http
+          .post(uri, headers: _authHeaders)
+          .timeout(const Duration(seconds: 6));
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint('[CloudApiService] Error en postBotAction ($botId/$action): $e');
+      return false;
+    }
+  }
+
+  /// Obtiene la lista de órdenes ejecutadas por el bot (`GET /api/v1/bots/$botId/orders`)
+  Future<List<Map<String, dynamic>>> fetchBotOrders(String botId) async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/v1/bots/$botId/orders');
+      final response = await http
+          .get(uri, headers: _authHeaders)
+          .timeout(const Duration(seconds: 6));
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        return data.cast<Map<String, dynamic>>();
+      }
+    } catch (e) {
+      debugPrint('[CloudApiService] Error en fetchBotOrders ($botId): $e');
+    }
+    return [];
+  }
+
+  /// Obtiene la bitácora de eventos y auditoría del bot (`GET /api/v1/bots/$botId/events`)
+  Future<List<Map<String, dynamic>>> fetchBotEvents(String botId) async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/v1/bots/$botId/events');
+      final response = await http
+          .get(uri, headers: _authHeaders)
+          .timeout(const Duration(seconds: 6));
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        return data.cast<Map<String, dynamic>>();
+      }
+    } catch (e) {
+      debugPrint('[CloudApiService] Error en fetchBotEvents ($botId): $e');
+    }
+    return [];
+  }
+
+  /// Reinicia desde cero un bot de simulación (`POST /api/v1/bots/$botId/reset-simulation`)
+  Future<bool> resetBotSimulation(String botId) async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/v1/bots/$botId/reset-simulation');
+      final response = await http
+          .post(uri, headers: _authHeaders)
+          .timeout(const Duration(seconds: 8));
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint('[CloudApiService] Error en resetBotSimulation ($botId): $e');
+      return false;
+    }
+  }
+
+  /// Elimina un bot detenido y sus registros asociados (`DELETE /api/v1/bots/$botId`)
+  Future<bool> deleteBot(String botId) async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/v1/bots/$botId');
+      final response = await http
+          .delete(uri, headers: _authHeaders)
+          .timeout(const Duration(seconds: 8));
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint('[CloudApiService] Error en deleteBot ($botId): $e');
+      return false;
+    }
+  }
+
+  /// Registra una inyección (`deposit`) o retiro (`withdraw`) de capital en un bot
+  Future<bool> postBotCapitalTransaction(
+    String botId,
+    String transactionType, {
+    required double amountUsdt,
+    required String reason,
+  }) async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/v1/bots/$botId/$transactionType');
+      final response = await http
+          .post(
+            uri,
+            headers: _authHeaders,
+            body: json.encode({
+              'amount_usdt': amountUsdt,
+              'reason': reason,
+              'notes': reason,
+            }),
+          )
+          .timeout(const Duration(seconds: 8));
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint(
+          '[CloudApiService] Error en postBotCapitalTransaction ($botId/$transactionType): $e');
+      return false;
+    }
+  }
+
+  /// Registra una nueva instancia de bot en la flota (`POST /api/v1/bots`)
+  Future<Map<String, dynamic>> createBot(Map<String, dynamic> payload) async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/v1/bots');
+      final response = await http
+          .post(
+            uri,
+            headers: _authHeaders,
+            body: json.encode(payload),
+          )
+          .timeout(const Duration(seconds: 8));
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return {
+          'ok': true,
+          'message': 'Instancia creada y registrada correctamente.',
+        };
+      }
+      try {
+        final err = json.decode(response.body) as Map<String, dynamic>;
+        return {
+          'ok': false,
+          'message':
+              (err['detail'] ?? 'Error al registrar el bot (${response.statusCode}).')
+                  .toString(),
+        };
+      } catch (_) {
+        return {
+          'ok': false,
+          'message': 'El servidor rechazó la solicitud (${response.statusCode}).',
+        };
+      }
+    } catch (e) {
+      debugPrint('[CloudApiService] Error en createBot: $e');
+      return {
+        'ok': false,
+        'message': 'Sin respuesta del servidor central ($baseUrl).',
+      };
+    }
+  }
+
+  /// Obtiene las configuraciones guardadas de estrategias (`GET /api/v1/bots/strategies/configs`)
+  Future<List<Map<String, dynamic>>> fetchStrategyConfigs({
+    String? strategyName,
+  }) async {
+    try {
+      final query = (strategyName != null && strategyName.trim().isNotEmpty)
+          ? '?strategy_name=${Uri.encodeComponent(strategyName.trim())}'
+          : '';
+      final uri = Uri.parse('$baseUrl/api/v1/bots/strategies/configs$query');
+      final response = await http
+          .get(uri, headers: _authHeaders)
+          .timeout(const Duration(seconds: 5));
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        return data.cast<Map<String, dynamic>>();
+      }
+    } catch (e) {
+      debugPrint('[CloudApiService] Error en fetchStrategyConfigs: $e');
+    }
+    return [];
+  }
+
+  /// Guarda una configuración personalizada de estrategia (`POST /api/v1/bots/strategies/configs`)
+  Future<Map<String, dynamic>> saveStrategyConfig(
+    Map<String, dynamic> payload,
+  ) async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/v1/bots/strategies/configs');
+      final response = await http
+          .post(
+            uri,
+            headers: _authHeaders,
+            body: json.encode(payload),
+          )
+          .timeout(const Duration(seconds: 6));
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = json.decode(response.body) as Map<String, dynamic>;
+        return {
+          'ok': true,
+          'data': data,
+          'message': 'Configuración guardada correctamente.',
+        };
+      }
+      try {
+        final err = json.decode(response.body) as Map<String, dynamic>;
+        return {
+          'ok': false,
+          'message': (err['detail'] ?? 'No se pudo guardar la configuración.')
+              .toString(),
+        };
+      } catch (_) {
+        return {
+          'ok': false,
+          'message': 'Error del servidor (${response.statusCode}).',
+        };
+      }
+    } catch (e) {
+      debugPrint('[CloudApiService] Error en saveStrategyConfig: $e');
+      return {
+        'ok': false,
+        'message': 'Sin respuesta del servidor central ($baseUrl).',
+      };
+    }
+  }
+
+  /// Elimina una configuración personalizada de estrategia (`DELETE /api/v1/bots/strategies/configs/{id}`)
+  Future<bool> deleteStrategyConfig(String configId) async {
+    try {
+      final uri =
+          Uri.parse('$baseUrl/api/v1/bots/strategies/configs/$configId');
+      final response = await http
+          .delete(uri, headers: _authHeaders)
+          .timeout(const Duration(seconds: 6));
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint('[CloudApiService] Error en deleteStrategyConfig: $e');
+      return false;
+    }
+  }
+
+  /// Actualiza los parámetros de estrategia de un bot existente (`PUT /api/v1/bots/{bot_id}/config`)
+  Future<Map<String, dynamic>> updateBotStrategyConfig(
+    String botId,
+    Map<String, dynamic> payload,
+  ) async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/v1/bots/$botId/config');
+      final response = await http
+          .put(
+            uri,
+            headers: _authHeaders,
+            body: json.encode(payload),
+          )
+          .timeout(const Duration(seconds: 6));
+      if (response.statusCode == 200) {
+        return {
+          'ok': true,
+          'message': 'Parámetros del bot actualizados correctamente.',
+        };
+      }
+      try {
+        final err = json.decode(response.body) as Map<String, dynamic>;
+        return {
+          'ok': false,
+          'message':
+              (err['detail'] ?? 'Error al actualizar configuración.').toString(),
+        };
+      } catch (_) {
+        return {
+          'ok': false,
+          'message': 'Error del servidor (${response.statusCode}).',
+        };
+      }
+    } catch (e) {
+      debugPrint('[CloudApiService] Error en updateBotStrategyConfig: $e');
+      return {
+        'ok': false,
+        'message': 'Sin respuesta del servidor central ($baseUrl).',
+      };
+    }
   }
 }

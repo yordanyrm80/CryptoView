@@ -361,11 +361,14 @@ class ChartProvider extends ChangeNotifier {
       );
 
       if (olderFetched.isNotEmpty) {
-        await DatabaseHelper.instance.saveCandles(
-          exchange: exchange,
-          symbol: symbol,
-          interval: _activeInterval,
-          candles: olderFetched,
+        // Persistir en SQLite en segundo plano sin bloquear el frame de UI del gráfico
+        unawaited(
+          DatabaseHelper.instance.saveCandles(
+            exchange: exchange,
+            symbol: symbol,
+            interval: _activeInterval,
+            candles: olderFetched,
+          ),
         );
       } else {
         olderFetched = await DatabaseHelper.instance.getCandles(

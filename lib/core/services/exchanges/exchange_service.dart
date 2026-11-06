@@ -2,6 +2,7 @@ import '../cloud_api_service.dart';
 import 'binance_service.dart';
 import 'kucoin_service.dart';
 import 'bingx_service.dart';
+import 'symbol_trading_rule.dart';
 
 /// Unified façade for all cryptocurrency exchanges supported by CryptoView
 class ExchangeService {
@@ -258,5 +259,16 @@ class ExchangeService {
       );
     }
     return false;
+  }
+
+  /// Get symbol precision and lot size limits for order placement
+  Future<SymbolTradingRule> fetchSymbolRules(String exchange, String symbol) async {
+    final ex = exchange.toLowerCase();
+    if (ex == 'kucoin') {
+      return await _kucoin.fetchSymbolRules(symbol);
+    } else if (ex == 'binance') {
+      return await _binance.fetchSymbolRules(symbol);
+    }
+    return SymbolTradingRule(symbol: symbol);
   }
 }

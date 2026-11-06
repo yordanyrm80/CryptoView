@@ -11,8 +11,14 @@ class SettingsProvider with ChangeNotifier {
   static const String defaultBuyLineColor = '#00E676'; // Neon Green
   static const String defaultSellLineColor = '#FF5252'; // Neon Red
   static const String defaultCurrentPriceColor = '#00E5FF'; // Electric Cyan
-  static const String defaultCloudApiUrl = 'https://129-146-110-196.sslip.io';
-  static const String defaultCloudApiToken = 'aa0d07ca7079caf19492d0fc4a762c593b3e02e205c669ae60de5cbbd66979c2';
+  static const String defaultCloudApiUrl = String.fromEnvironment(
+    'CLOUD_API_URL',
+    defaultValue: 'https://129-146-110-196.sslip.io',
+  );
+  static const String defaultCloudApiToken = String.fromEnvironment(
+    'API_SECRET_TOKEN',
+    defaultValue: 'aa0d07ca7079caf19492d0fc4a762c593b3e02e205c669ae60de5cbbd66979c2',
+  );
 
   String _buyLineColorHex = defaultBuyLineColor;
   String _sellLineColorHex = defaultSellLineColor;

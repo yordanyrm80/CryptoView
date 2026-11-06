@@ -18,7 +18,9 @@ class TrackerProvider extends ChangeNotifier {
   bool _isFetchingBalance = false;
 
   TrackerProvider() {
-    loadData();
+    loadData().then((_) {
+      autoSyncCurrentSymbol(lookbackDays: 3);
+    });
   }
 
   double getBuyAmountForExchange(String exchange) {
@@ -35,6 +37,11 @@ class TrackerProvider extends ChangeNotifier {
   double _importProgress = 0.0;
   String _importStatusMessage = '';
   int _importFoundCount = 0;
+
+  // Silent auto-sync state
+  bool _isSilentSyncing = false;
+  bool get isSilentSyncing => _isSilentSyncing;
+  final Map<String, DateTime> _lastQuickSyncTimes = {};
 
   // Filter state
   bool _filterOnlyCurrentSymbol = true;
@@ -89,12 +96,64 @@ class TrackerProvider extends ChangeNotifier {
     if (changed) {
       fetchLiveBalance(exchange);
       notifyListeners();
+      // Auto-sincronizar compras y ventas al cambiar de moneda
+      autoSyncCurrentSymbol(lookbackDays: 3);
     }
   }
 
-  /// Toggle filtering between only active symbol and all symbols
+  /// Consulta silenciosa en segundo plano de las compras y ventas recientes (últimos 3 días)
+  /// para la moneda actualmente analizada.
+  Future<int> autoSyncCurrentSymbol({int lookbackDays = 3, bool force = false}) async {
+    final key = '$_activeExchange:$_activeSymbol';
+    final now = DateTime.now();
+
+    // Debounce: evitar peticiones repetidas a la misma moneda si se consultó hace menos de 30 segundos
+    if (!force && _lastQuickSyncTimes.containsKey(key)) {
+      final diff = now.difference(_lastQuickSyncTimes[key]!);
+      if (diff.inSeconds < 30) {
+        return 0;
+      }
+    }
+
+    if (_isImporting || _isSilentSyncing) return 0;
+
+    final credentials = await getCredentials(_activeExchange);
+    if (credentials == null || (credentials['api_key'] as String? ?? '').isEmpty) {
+      return 0;
+    }
+
+    _isSilentSyncing = true;
+    _lastQuickSyncTimes[key] = now;
+    notifyListeners();
+
+    try {
+      final importedCount = await importTransactionsForSymbol(
+        _activeExchange,
+        _activeSymbol,
+        lookbackDays: lookbackDays,
+        updateProviderState: false,
+      );
+
+      // Si se importaron nuevas compras o ventas, recargamos la lista
+      if (importedCount > 0) {
+        await loadData();
+      } else {
+        await fetchLiveBalance(_activeExchange);
+      }
+
+      return importedCount;
+    } catch (e) {
+      debugPrint('[TrackerProvider] autoSync error en $_activeSymbol: $e');
+      return 0;
+    } finally {
+      _isSilentSyncing = false;
+      notifyListeners();
+    }
+  }
+
+  /// The app is focused strictly on the active symbol
   void setFilterOnlyCurrentSymbol(bool value) {
-    _filterOnlyCurrentSymbol = value;
+    _filterOnlyCurrentSymbol = true;
     notifyListeners();
   }
 

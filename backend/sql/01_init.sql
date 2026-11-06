@@ -183,3 +183,101 @@ CREATE TABLE IF NOT EXISTS system_heartbeat (
     status VARCHAR(32) DEFAULT 'running',
     details JSONB DEFAULT '{}'::jsonb
 );
+
+-- 9. Tablas del Motor Multi-Bot (Flota CriptoBot en PostgreSQL)
+CREATE TABLE IF NOT EXISTS bots (
+    bot_id VARCHAR(64) PRIMARY KEY,
+    symbol VARCHAR(32) NOT NULL,
+    strategy_name VARCHAR(64) NOT NULL,
+    budget DOUBLE PRECISION NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    dry_run BOOLEAN NOT NULL DEFAULT TRUE,
+    config_json TEXT NOT NULL,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_bots_status ON bots (status);
+
+CREATE TABLE IF NOT EXISTS orders (
+    id VARCHAR(64) PRIMARY KEY,
+    bot_id VARCHAR(64) NOT NULL,
+    symbol VARCHAR(32) NOT NULL,
+    side VARCHAR(16) NOT NULL,
+    order_type VARCHAR(16) NOT NULL,
+    price DOUBLE PRECISION NOT NULL,
+    amount DOUBLE PRECISION NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    fee DOUBLE PRECISION DEFAULT 0.0,
+    created_at BIGINT NOT NULL,
+    filled_at BIGINT
+);
+
+CREATE INDEX IF NOT EXISTS idx_orders_bot_status ON orders (bot_id, status);
+
+CREATE TABLE IF NOT EXISTS tranches (
+    id SERIAL PRIMARY KEY,
+    bot_id VARCHAR(64) NOT NULL,
+    symbol VARCHAR(32) NOT NULL,
+    tranche_index INTEGER NOT NULL,
+    allocated_budget DOUBLE PRECISION NOT NULL,
+    buy_price DOUBLE PRECISION NOT NULL,
+    amount DOUBLE PRECISION NOT NULL,
+    target_sell_price DOUBLE PRECISION NOT NULL,
+    highest_price DOUBLE PRECISION DEFAULT 0.0,
+    actual_sell_price DOUBLE PRECISION,
+    status VARCHAR(32) NOT NULL,
+    buy_fee DOUBLE PRECISION DEFAULT 0.0,
+    sell_fee DOUBLE PRECISION DEFAULT 0.0,
+    buy_timestamp BIGINT,
+    sell_timestamp BIGINT,
+    profit_usdt DOUBLE PRECISION DEFAULT 0.0,
+    subsidized_satoshis DOUBLE PRECISION DEFAULT 0.0
+);
+
+CREATE INDEX IF NOT EXISTS idx_tranches_lookup ON tranches (bot_id, status);
+
+CREATE TABLE IF NOT EXISTS capital_transactions (
+    id SERIAL PRIMARY KEY,
+    bot_id VARCHAR(64) NOT NULL,
+    type VARCHAR(32) NOT NULL,
+    amount DOUBLE PRECISION NOT NULL,
+    available_after DOUBLE PRECISION NOT NULL,
+    timestamp BIGINT NOT NULL,
+    reason TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_capital_tx_lookup ON capital_transactions (bot_id, timestamp ASC);
+
+CREATE TABLE IF NOT EXISTS bot_events (
+    id SERIAL PRIMARY KEY,
+    bot_id VARCHAR(64) NOT NULL,
+    event_type VARCHAR(64) NOT NULL,
+    details TEXT,
+    timestamp BIGINT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_bot_events_lookup ON bot_events (bot_id, timestamp DESC);
+
+CREATE TABLE IF NOT EXISTS system_settings (
+    key VARCHAR(64) PRIMARY KEY,
+    value_json TEXT NOT NULL,
+    updated_at BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS strategy_configs (
+    id VARCHAR(64) PRIMARY KEY,
+    strategy_name VARCHAR(64) NOT NULL,
+    name VARCHAR(128) NOT NULL,
+    description TEXT,
+    is_recommended BOOLEAN NOT NULL DEFAULT FALSE,
+    is_system BOOLEAN NOT NULL DEFAULT FALSE,
+    params_json TEXT NOT NULL,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_strategy_configs_strategy ON strategy_configs (strategy_name);
+

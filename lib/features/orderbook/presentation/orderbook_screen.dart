@@ -29,6 +29,11 @@ class _OrderBookScreenState extends State<OrderBookScreen> with SingleTickerProv
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Provider.of<OrderBookProvider>(context, listen: false).startPolling();
+      }
+    });
   }
 
   @override
@@ -51,6 +56,9 @@ class _OrderBookScreenState extends State<OrderBookScreen> with SingleTickerProv
 
   @override
   void dispose() {
+    try {
+      Provider.of<OrderBookProvider>(context, listen: false).stopPolling();
+    } catch (_) {}
     _tabController.dispose();
     super.dispose();
   }

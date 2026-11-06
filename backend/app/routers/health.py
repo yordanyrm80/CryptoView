@@ -25,41 +25,50 @@ async def health_check():
             symbols_count = await conn.fetchval("SELECT COUNT(*) FROM tracked_symbols WHERE is_active = TRUE;")
             trades_count = await conn.fetchval("SELECT COUNT(*) FROM account_trades;")
 
-            # Monitoreo de latido del Ingestion Worker 24/7
-            worker_hb = await conn.fetchrow("""
-                SELECT last_heartbeat, status, details,
+            # Monitoreo de latidos de servicios 24/7 (collector y bot_supervisor)
+            heartbeats_rows = await conn.fetch("""
+                SELECT service_name, last_heartbeat, status, details,
                        EXTRACT(EPOCH FROM (NOW() - last_heartbeat)) AS seconds_since_heartbeat
-                FROM system_heartbeat
-                WHERE service_name = 'collector';
+                FROM system_heartbeat;
             """)
 
-        worker_status = "offline"
-        seconds_ago = None
-        details = {}
+        hb_map = {r["service_name"]: r for r in heartbeats_rows}
 
-        if worker_hb:
-            seconds_ago = float(worker_hb["seconds_since_heartbeat"] or 0)
-            raw_details = worker_hb["details"]
-            if isinstance(raw_details, str):
-                try:
-                    details = json.loads(raw_details)
-                except Exception:
-                    details = {}
-            elif isinstance(raw_details, dict):
-                details = raw_details
+        def _parse_service_hb(hb_row, max_seconds=90):
+            if not hb_row:
+                return "offline", None, {}
+            sec = float(hb_row["seconds_since_heartbeat"] or 0)
+            raw = hb_row["details"]
+            det = json.loads(raw) if isinstance(raw, str) else (raw if isinstance(raw, dict) else {})
+            stat = "online" if sec <= max_seconds else "stalled"
+            return stat, round(sec, 1), det
 
-            # Si el worker reportó en los últimos 90 segundos se considera en línea
-            if seconds_ago <= 90:
-                worker_status = "online"
-            else:
-                worker_status = "stalled"
+        collector_status, collector_sec, collector_det = _parse_service_hb(hb_map.get("collector"), max_seconds=90)
+        bot_sup_status, bot_sup_sec, bot_sup_det = _parse_service_hb(hb_map.get("bot_supervisor"), max_seconds=180)
 
         return {
             "status": "online",
             "database": "connected (TimescaleDB / PostgreSQL 17)",
-            "worker_status": worker_status,
-            "worker_last_seen_seconds": round(seconds_ago, 1) if seconds_ago is not None else None,
-            "worker_details": details,
+            # Compatibilidad retroactiva con cliente Flutter existente
+            "worker_status": collector_status,
+            "worker_last_seen_seconds": collector_sec,
+            "worker_details": collector_det,
+            # Nueva telemetría independiente de Bot Supervisor
+            "bot_supervisor_status": bot_sup_status,
+            "bot_supervisor_last_seen_seconds": bot_sup_sec,
+            "bot_supervisor_details": bot_sup_det,
+            "services": {
+                "collector": {
+                    "status": collector_status,
+                    "last_seen_seconds": collector_sec,
+                    "details": collector_det,
+                },
+                "bot_supervisor": {
+                    "status": bot_sup_status,
+                    "last_seen_seconds": bot_sup_sec,
+                    "details": bot_sup_det,
+                },
+            },
             "tracked_symbols_active": symbols_count or 0,
             "total_candles_stored": max(0, candles_count or 0),
             "total_trades_stored": trades_count or 0,

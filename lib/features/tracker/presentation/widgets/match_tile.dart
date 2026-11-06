@@ -28,6 +28,8 @@ class MatchTile extends StatelessWidget {
     final buyTotalQuote = buyPrice * matchedAmount;
     final sellTotalQuote = sellPrice * matchedAmount;
     final profitPercent = buyTotalQuote > 0 ? (profit / buyTotalQuote) * 100 : 0.0;
+    final grossProfit = sellTotalQuote - buyTotalQuote;
+    final totalFeeDeducted = grossProfit - profit;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -168,9 +170,31 @@ class MatchTile extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  'Volumen casado: $matchedAmount $baseAsset · $dateStr',
-                  style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                Expanded(
+                  child: Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        'Volumen casado: $matchedAmount $baseAsset · $dateStr',
+                        style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                      ),
+                      if (!isExpense && totalFeeDeducted > 0.005) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: AppColors.background,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: Text(
+                            'Fee: -\$${totalFeeDeducted.toStringAsFixed(2)}',
+                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 10),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.undo, color: AppColors.textMuted, size: 18),

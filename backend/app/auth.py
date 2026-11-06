@@ -11,10 +11,39 @@ api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 _failed_attempts: dict[str, list[float]] = defaultdict(list)
 _blocked_ips: dict[str, float] = {}
 _request_history: dict[str, list[float]] = defaultdict(list)
+_last_cleanup_time: float = 0.0
 
 MAX_FAILED_ATTEMPTS = 5
 LOCKOUT_TIME_SECONDS = 300       # 5 minutos de bloqueo tras 5 fallos consecutivos
 MAX_REQUESTS_PER_MINUTE = 180    # Límite general por IP (3 req/s sostenido)
+
+def _cleanup_stale_ip_records(now: float) -> None:
+    """Purga registros antiguos de IPs inactivas cada 60s para evitar fugas de memoria."""
+    global _last_cleanup_time
+    if now - _last_cleanup_time < 60:
+        return
+    _last_cleanup_time = now
+
+    # 1. Purgar bloqueos expirados
+    expired_blocks = [ip for ip, unblock_time in _blocked_ips.items() if now >= unblock_time]
+    for ip in expired_blocks:
+        del _blocked_ips[ip]
+
+    # 2. Purgar historiales de requests con más de 60s de antigüedad
+    stale_histories = [
+        ip for ip, timestamps in _request_history.items()
+        if not timestamps or (now - timestamps[-1] >= 60)
+    ]
+    for ip in stale_histories:
+        del _request_history[ip]
+
+    # 3. Purgar intentos fallidos antiguos (> 60s)
+    stale_fails = [
+        ip for ip, timestamps in _failed_attempts.items()
+        if not timestamps or (now - timestamps[-1] >= 60)
+    ]
+    for ip in stale_fails:
+        del _failed_attempts[ip]
 
 def _get_client_ip(request: Request) -> str:
     forwarded_for = request.headers.get("x-forwarded-for")
@@ -35,6 +64,7 @@ async def verify_api_key(request: Request, api_key: str = Security(api_key_heade
     4. Auto-recuperación si el cliente suministra el token maestro auténtico de 256 bits.
     """
     now = time.time()
+    _cleanup_stale_ip_records(now)
     client_ip = _get_client_ip(request)
 
     # 1. Rate Limiting general por IP (ventana deslizante de 60 segundos)

@@ -1,6 +1,9 @@
 # Propuesta Técnica: CryptoView - Clon Móvil de TabTrader
 
-Esta propuesta detalla el diseño arquitectónico, la pila de tecnologías y las fases de desarrollo para **CryptoView**, un clon móvil de TabTrader enfocado en la lectura, visualización de gráficos, dibujo de líneas de soporte/resistencia, y un módulo especializado en el seguimiento y emparejamiento ("casamiento") de operaciones de compra/venta para calcular ganancias reales.
+> [!NOTE]
+> **Documento Histórico / Conceptual:** Esta propuesta corresponde a la fase inicial exploratoria del proyecto (planteada originalmente en React + Vite). Para consultar la arquitectura de producción definitiva actualmente implementada (Flutter multiplataforma, backend FastAPI, series temporales en TimescaleDB, sistema dual de respaldos y motor algorítmico CriptoBot), ver [`doc/ARCHITECTURE.md`](ARCHITECTURE.md), [`doc/contexto.md`](contexto.md) y [`README.md`](../README.md).
+
+Esta propuesta detalla el diseño arquitectónico inicial, la pila de tecnologías y las fases de desarrollo para **CryptoView**, un clon móvil de TabTrader enfocado en la lectura, visualización de gráficos, dibujo de líneas de soporte/resistencia, y un módulo especializado en el seguimiento y emparejamiento ("casamiento") de operaciones de compra/venta para calcular ganancias reales.
 
 ---
 

@@ -1,10 +1,13 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
+import 'symbol_trading_rule.dart';
 
 class KucoinService {
   static final KucoinService instance = KucoinService._init();
   KucoinService._init();
+
+  final Map<String, SymbolTradingRule> _rulesCache = {};
 
   String _mapInterval(String interval) {
     switch (interval) {
@@ -26,6 +29,44 @@ class KucoinService {
       }
     }
     return formatted;
+  }
+
+  /// Fetches symbol trading precision rules (lot size, price increment, min limits)
+  Future<SymbolTradingRule> fetchSymbolRules(String symbol) async {
+    final formattedSymbol = _formatSymbol(symbol);
+    if (_rulesCache.containsKey(formattedSymbol)) {
+      return _rulesCache[formattedSymbol]!;
+    }
+
+    try {
+      final url = Uri.parse('https://api.kucoin.com/api/v2/symbols/$formattedSymbol');
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> root = json.decode(response.body);
+        if (root['code'] == '200000' && root['data'] != null) {
+          final data = root['data'];
+          final rule = SymbolTradingRule(
+            symbol: formattedSymbol,
+            minSize: double.tryParse(data['baseMinSize']?.toString() ?? '0.000001') ?? 0.000001,
+            maxSize: double.tryParse(data['baseMaxSize']?.toString() ?? '1000000000') ?? 1000000000,
+            stepSize: double.tryParse(data['baseIncrement']?.toString() ?? '0.000001') ?? 0.000001,
+            minPrice: 0.00000001,
+            maxPrice: 1000000000,
+            tickSize: double.tryParse(data['priceIncrement']?.toString() ?? '0.000001') ?? 0.000001,
+            minFunds: double.tryParse(data['quoteMinSize']?.toString() ?? '0.1') ?? 0.1,
+          );
+          _rulesCache[formattedSymbol] = rule;
+          return rule;
+        }
+      }
+    } catch (_) {
+      // Fallback
+    }
+
+    // Default fallback rule if network/exchange info fails
+    final fallback = SymbolTradingRule(symbol: formattedSymbol);
+    _rulesCache[formattedSymbol] = fallback;
+    return fallback;
   }
 
   Future<List<Map<String, dynamic>>> fetchCandles(String symbol, String interval) async {
@@ -470,11 +511,15 @@ class KucoinService {
     final now = DateTime.now().millisecondsSinceEpoch.toString();
     const requestPath = '/api/v1/orders';
     final clientOid = '${DateTime.now().millisecondsSinceEpoch}-${DateTime.now().microsecond}';
+    final formattedSym = _formatSymbol(symbol);
+
+    // Fetch and apply symbol precision & validation rules
+    final rules = await fetchSymbolRules(formattedSym);
 
     final Map<String, dynamic> payload = {
       'clientOid': clientOid,
       'side': side.toLowerCase(),
-      'symbol': _formatSymbol(symbol),
+      'symbol': formattedSym,
       'type': type.toLowerCase(),
     };
 
@@ -482,20 +527,39 @@ class KucoinService {
       if (price == null || price <= 0 || size == null || size <= 0) {
         throw Exception('Precio y cantidad son requeridos para órdenes límite.');
       }
-      payload['price'] = price.toString();
-      payload['size'] = size.toString();
+      final sizeValidation = rules.validateSize(size);
+      if (sizeValidation != null) {
+        throw Exception(sizeValidation);
+      }
+      payload['price'] = rules.formatPriceString(price);
+      payload['size'] = rules.formatSizeString(size);
     } else {
       // market
       if (side.toLowerCase() == 'buy') {
         if (funds != null && funds > 0) {
-          payload['funds'] = funds.toString();
+          final fundsValidation = rules.validateFunds(funds);
+          if (fundsValidation != null) {
+            throw Exception(fundsValidation);
+          }
+          payload['funds'] = funds.toStringAsFixed(2);
         } else if (size != null && size > 0) {
-          payload['size'] = size.toString();
+          final sizeValidation = rules.validateSize(size);
+          if (sizeValidation != null) {
+            throw Exception(sizeValidation);
+          }
+          payload['size'] = rules.formatSizeString(size);
+        } else {
+          throw Exception('Ingresa el monto o la cantidad para la orden de mercado.');
         }
       } else {
-        if (size != null && size > 0) {
-          payload['size'] = size.toString();
+        if (size == null || size <= 0) {
+          throw Exception('Ingresa la cantidad a vender.');
         }
+        final sizeValidation = rules.validateSize(size);
+        if (sizeValidation != null) {
+          throw Exception(sizeValidation);
+        }
+        payload['size'] = rules.formatSizeString(size);
       }
     }
 

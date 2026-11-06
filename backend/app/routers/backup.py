@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 
 from app.database import get_db_pool
 from app.auth import verify_api_key
+from app.routers.bots import _ensure_bot_tables
 
 router = APIRouter(
     prefix="/api/v1/backup",
@@ -37,11 +38,19 @@ async def export_database_backup(
     now_utc = datetime.now(timezone.utc)
 
     async with pool.acquire() as conn:
+        await _ensure_bot_tables(conn)
         symbols = [_serialize_row(r) for r in await conn.fetch("SELECT * FROM tracked_symbols ORDER BY exchange, symbol;")]
         keys = [_serialize_row(r) for r in await conn.fetch("SELECT * FROM api_keys ORDER BY exchange;")]
         trades = [_serialize_row(r) for r in await conn.fetch("SELECT * FROM account_trades ORDER BY id ASC;")]
         withdrawals = [_serialize_row(r) for r in await conn.fetch("SELECT * FROM account_withdrawals ORDER BY id ASC;")]
         matches = [_serialize_row(r) for r in await conn.fetch("SELECT * FROM trade_matches ORDER BY id ASC;")]
+        bots_list = [_serialize_row(r) for r in await conn.fetch("SELECT * FROM bots ORDER BY created_at ASC;")]
+        tranches_list = [_serialize_row(r) for r in await conn.fetch("SELECT * FROM tranches ORDER BY id ASC;")]
+        orders_list = [_serialize_row(r) for r in await conn.fetch("SELECT * FROM orders ORDER BY created_at ASC;")]
+        cap_tx_list = [_serialize_row(r) for r in await conn.fetch("SELECT * FROM capital_transactions ORDER BY id ASC;")]
+        bot_events_list = [_serialize_row(r) for r in await conn.fetch("SELECT * FROM bot_events ORDER BY id ASC;")]
+        sys_settings_list = [_serialize_row(r) for r in await conn.fetch("SELECT * FROM system_settings ORDER BY key ASC;")]
+        strategy_configs_list = [_serialize_row(r) for r in await conn.fetch("SELECT * FROM strategy_configs ORDER BY created_at ASC;")]
 
         candles = []
         if include_candles:
@@ -61,7 +70,7 @@ async def export_database_backup(
             ]
 
     backup_payload = {
-        "version": "2.0",
+        "version": "2.1",
         "exported_at_utc": now_utc.isoformat(),
         "include_candles": include_candles,
         "counts": {
@@ -70,6 +79,10 @@ async def export_database_backup(
             "account_trades": len(trades),
             "account_withdrawals": len(withdrawals),
             "trade_matches": len(matches),
+            "bots": len(bots_list),
+            "tranches": len(tranches_list),
+            "orders": len(orders_list),
+            "capital_transactions": len(cap_tx_list),
             "market_candles": len(candles),
         },
         "data": {
@@ -78,6 +91,13 @@ async def export_database_backup(
             "account_trades": trades,
             "account_withdrawals": withdrawals,
             "trade_matches": matches,
+            "bots": bots_list,
+            "tranches": tranches_list,
+            "orders": orders_list,
+            "capital_transactions": cap_tx_list,
+            "bot_events": bot_events_list,
+            "system_settings": sys_settings_list,
+            "strategy_configs": strategy_configs_list,
             "market_candles": candles,
         }
     }
@@ -197,7 +217,191 @@ async def restore_database_backup(request: Request):
                 """, int(m["id"]), m.get("buy_trade_id"), m.get("sell_trade_id"), m.get("withdrawal_id"), m.get("match_type", "trade"), float(m["matched_amount"]), float(m.get("profit", 0.0)), m_time, m.get("notes", ""))
             restored_counts["trade_matches"] = len(matches)
 
-            # 6. Market Candles (opcional)
+            # 6. Flota de Bots Cuantitativos (opcional, retrocompatible con respaldos v2.0)
+            await _ensure_bot_tables(conn)
+            bots_list = data.get("bots", [])
+            if bots_list:
+                bot_records = [
+                    (
+                        b["bot_id"],
+                        b["symbol"],
+                        b["strategy_name"],
+                        float(b["budget"]),
+                        b.get("status", "STOPPED"),
+                        bool(b.get("dry_run", True)),
+                        b["config_json"],
+                        int(b["created_at"]),
+                        int(b["updated_at"]),
+                    )
+                    for b in bots_list
+                ]
+                await conn.executemany("""
+                    INSERT INTO bots (bot_id, symbol, strategy_name, budget, status, dry_run, config_json, created_at, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    ON CONFLICT (bot_id) DO UPDATE SET
+                        symbol = EXCLUDED.symbol,
+                        strategy_name = EXCLUDED.strategy_name,
+                        budget = EXCLUDED.budget,
+                        status = EXCLUDED.status,
+                        dry_run = EXCLUDED.dry_run,
+                        config_json = EXCLUDED.config_json,
+                        updated_at = EXCLUDED.updated_at;
+                """, bot_records)
+            restored_counts["bots"] = len(bots_list)
+
+            tranches_list = data.get("tranches", [])
+            if tranches_list:
+                tranche_records = [
+                    (
+                        int(tr["id"]),
+                        tr["bot_id"],
+                        tr["symbol"],
+                        int(tr["tranche_index"]),
+                        float(tr["allocated_budget"]),
+                        float(tr["buy_price"]),
+                        float(tr["amount"]),
+                        float(tr["target_sell_price"]),
+                        float(tr.get("highest_price") or tr["buy_price"]),
+                        tr.get("actual_sell_price"),
+                        tr["status"],
+                        float(tr.get("buy_fee", 0.0)),
+                        float(tr.get("sell_fee", 0.0)),
+                        tr.get("buy_timestamp"),
+                        tr.get("sell_timestamp"),
+                        float(tr.get("profit_usdt", 0.0)),
+                        float(tr.get("subsidized_satoshis", 0.0)),
+                    )
+                    for tr in tranches_list
+                ]
+                await conn.executemany("""
+                    INSERT INTO tranches (id, bot_id, symbol, tranche_index, allocated_budget, buy_price, amount, target_sell_price, highest_price, actual_sell_price, status, buy_fee, sell_fee, buy_timestamp, sell_timestamp, profit_usdt, subsidized_satoshis)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+                    ON CONFLICT (id) DO UPDATE SET
+                        status = EXCLUDED.status,
+                        highest_price = EXCLUDED.highest_price,
+                        actual_sell_price = EXCLUDED.actual_sell_price,
+                        sell_fee = EXCLUDED.sell_fee,
+                        sell_timestamp = EXCLUDED.sell_timestamp,
+                        profit_usdt = EXCLUDED.profit_usdt;
+                """, tranche_records)
+            restored_counts["tranches"] = len(tranches_list)
+
+            bot_events_list = data.get("bot_events", [])
+            if bot_events_list:
+                event_records = [
+                    (
+                        int(ev["id"]),
+                        ev["bot_id"],
+                        ev["event_type"],
+                        ev.get("details", ""),
+                        int(ev["timestamp"]),
+                    )
+                    for ev in bot_events_list
+                ]
+                await conn.executemany("""
+                    INSERT INTO bot_events (id, bot_id, event_type, details, timestamp)
+                    VALUES ($1, $2, $3, $4, $5)
+                    ON CONFLICT (id) DO NOTHING;
+                """, event_records)
+            restored_counts["bot_events"] = len(bot_events_list)
+
+            orders_list = data.get("orders", [])
+            if orders_list:
+                order_records = [
+                    (
+                        o["id"],
+                        o["bot_id"],
+                        o["symbol"],
+                        o["side"],
+                        o["order_type"],
+                        float(o["price"]),
+                        float(o["amount"]),
+                        o["status"],
+                        float(o.get("fee", 0.0)),
+                        int(o["created_at"]),
+                        o.get("filled_at"),
+                    )
+                    for o in orders_list
+                ]
+                await conn.executemany("""
+                    INSERT INTO orders (id, bot_id, symbol, side, order_type, price, amount, status, fee, created_at, filled_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                    ON CONFLICT (id) DO UPDATE SET
+                        status = EXCLUDED.status,
+                        fee = EXCLUDED.fee,
+                        filled_at = EXCLUDED.filled_at;
+                """, order_records)
+            restored_counts["orders"] = len(orders_list)
+
+            cap_tx_list = data.get("capital_transactions", [])
+            if cap_tx_list:
+                cap_records = [
+                    (
+                        int(ct["id"]),
+                        ct["bot_id"],
+                        ct["type"],
+                        float(ct["amount"]),
+                        float(ct["available_after"]),
+                        int(ct["timestamp"]),
+                        ct.get("reason", ""),
+                    )
+                    for ct in cap_tx_list
+                ]
+                await conn.executemany("""
+                    INSERT INTO capital_transactions (id, bot_id, type, amount, available_after, timestamp, reason)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    ON CONFLICT (id) DO NOTHING;
+                """, cap_records)
+            restored_counts["capital_transactions"] = len(cap_tx_list)
+
+            sys_settings_list = data.get("system_settings", [])
+            if sys_settings_list:
+                settings_records = [
+                    (
+                        ss["key"],
+                        ss["value_json"],
+                        int(ss["updated_at"]),
+                    )
+                    for ss in sys_settings_list
+                ]
+                await conn.executemany("""
+                    INSERT INTO system_settings (key, value_json, updated_at)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (key) DO UPDATE SET
+                        value_json = EXCLUDED.value_json,
+                        updated_at = EXCLUDED.updated_at;
+                """, settings_records)
+
+            strategy_configs_list = data.get("strategy_configs", [])
+            valid_configs = [
+                sc for sc in strategy_configs_list
+                if not sc.get("is_system") and sc.get("id") != "recommended_btc_quantum_evolution"
+            ]
+            if valid_configs:
+                config_records = [
+                    (
+                        sc["id"],
+                        sc["strategy_name"],
+                        sc["name"],
+                        sc.get("description", ""),
+                        sc["params_json"],
+                        int(sc.get("created_at", 0)),
+                        int(sc.get("updated_at", 0)),
+                    )
+                    for sc in valid_configs
+                ]
+                await conn.executemany("""
+                    INSERT INTO strategy_configs (id, strategy_name, name, description, is_recommended, is_system, params_json, created_at, updated_at)
+                    VALUES ($1, $2, $3, $4, FALSE, FALSE, $5, $6, $7)
+                    ON CONFLICT (id) DO UPDATE SET
+                        name = EXCLUDED.name,
+                        description = EXCLUDED.description,
+                        params_json = EXCLUDED.params_json,
+                        updated_at = EXCLUDED.updated_at;
+                """, config_records)
+            restored_counts["strategy_configs"] = len(strategy_configs_list)
+
+            # 7. Market Candles (opcional)
             candles = data.get("market_candles", [])
             if candles:
                 records = [
@@ -211,11 +415,13 @@ async def restore_database_backup(request: Request):
                 """, records)
             restored_counts["market_candles"] = len(candles)
 
-            # 7. Sincronizar secuencias serial (auto-increment) de PostgreSQL para evitar colisiones de ID
+            # 8. Sincronizar secuencias serial (auto-increment) de PostgreSQL para evitar colisiones de ID
             await conn.execute("""
                 SELECT setval(pg_get_serial_sequence('account_trades', 'id'), COALESCE((SELECT MAX(id) FROM account_trades), 1));
                 SELECT setval(pg_get_serial_sequence('account_withdrawals', 'id'), COALESCE((SELECT MAX(id) FROM account_withdrawals), 1));
                 SELECT setval(pg_get_serial_sequence('trade_matches', 'id'), COALESCE((SELECT MAX(id) FROM trade_matches), 1));
+                SELECT setval(pg_get_serial_sequence('tranches', 'id'), COALESCE((SELECT MAX(id) FROM tranches), 1));
+                SELECT setval(pg_get_serial_sequence('capital_transactions', 'id'), COALESCE((SELECT MAX(id) FROM capital_transactions), 1));
             """)
 
     return {

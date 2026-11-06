@@ -78,7 +78,7 @@ class _ExchangesScreenState extends State<ExchangesScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: AppColors.secondary,
-          content: Text('No tienes monedas marcadas como favoritas ⭐ en el Watchlist.'),
+          content: Text('No tienes mercados marcados como favoritos en la lista de seguimiento.'),
         ),
       );
       return;
@@ -374,7 +374,7 @@ class _ExchangesScreenState extends State<ExchangesScreen> {
                           ),
                         ],
                       ),
-                      const Text('Definidas con ⭐ en Seguimiento', style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
+                      const Text('Seleccionadas en la lista de seguimiento', style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -392,7 +392,7 @@ class _ExchangesScreenState extends State<ExchangesScreen> {
                           SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Marca con la estrella ⭐ en la pestaña Seguimiento las monedas que deseas sincronizar.',
+                              'Marca como favoritas en la lista de seguimiento las monedas que deseas sincronizar en lote.',
                               style: TextStyle(color: AppColors.textMuted, fontSize: 12),
                             ),
                           ),
@@ -476,7 +476,7 @@ class _ExchangesScreenState extends State<ExchangesScreen> {
                           ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                           : const Icon(Icons.cloud_download, size: 20),
                       label: Text(
-                        isImporting ? 'Sincronizando...' : 'Importar Historial de Monedas Favoritas ⭐',
+                        isImporting ? 'Sincronizando...' : 'Importar Historial de Monedas Favoritas',
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                       ),
                       onPressed: isImporting ? null : () => _startBatchSync(favorites),

@@ -1,10 +1,76 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
+import 'symbol_trading_rule.dart';
 
 class BinanceService {
   static final BinanceService instance = BinanceService._init();
   BinanceService._init();
+
+  final Map<String, SymbolTradingRule> _rulesCache = {};
+
+  /// Fetch trading precision rules and filters for a symbol on Binance
+  Future<SymbolTradingRule> fetchSymbolRules(String symbol) async {
+    final formattedSymbol = symbol.replaceAll('-', '').replaceAll('/', '').toUpperCase();
+    if (_rulesCache.containsKey(formattedSymbol)) {
+      return _rulesCache[formattedSymbol]!;
+    }
+
+    try {
+      final url = Uri.parse('https://api.binance.com/api/v3/exchangeInfo?symbol=$formattedSymbol');
+      final response = await http.get(url);
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> root = json.decode(response.body);
+        final List<dynamic> symbols = root['symbols'] ?? [];
+        if (symbols.isNotEmpty) {
+          final sym = symbols[0];
+          final List<dynamic> filters = sym['filters'] ?? [];
+
+          double minSize = 0.000001;
+          double maxSize = 1000000000.0;
+          double stepSize = 0.000001;
+          double minPrice = 0.00000001;
+          double maxPrice = 1000000000.0;
+          double tickSize = 0.00000001;
+          double minFunds = 5.0;
+
+          for (var f in filters) {
+            final fType = f['filterType'];
+            if (fType == 'LOT_SIZE') {
+              minSize = double.tryParse(f['minQty']?.toString() ?? '') ?? minSize;
+              maxSize = double.tryParse(f['maxQty']?.toString() ?? '') ?? maxSize;
+              stepSize = double.tryParse(f['stepSize']?.toString() ?? '') ?? stepSize;
+            } else if (fType == 'PRICE_FILTER') {
+              minPrice = double.tryParse(f['minPrice']?.toString() ?? '') ?? minPrice;
+              maxPrice = double.tryParse(f['maxPrice']?.toString() ?? '') ?? maxPrice;
+              tickSize = double.tryParse(f['tickSize']?.toString() ?? '') ?? tickSize;
+            } else if (fType == 'NOTIONAL') {
+              minFunds = double.tryParse(f['minNotional']?.toString() ?? '') ?? minFunds;
+            }
+          }
+
+          final rule = SymbolTradingRule(
+            symbol: formattedSymbol,
+            minSize: minSize,
+            maxSize: maxSize,
+            stepSize: stepSize,
+            minPrice: minPrice,
+            maxPrice: maxPrice,
+            tickSize: tickSize,
+            minFunds: minFunds,
+          );
+          _rulesCache[formattedSymbol] = rule;
+          return rule;
+        }
+      }
+    } catch (_) {
+      // Fallback
+    }
+
+    final fallback = SymbolTradingRule(symbol: formattedSymbol);
+    _rulesCache[formattedSymbol] = fallback;
+    return fallback;
+  }
 
   /// Fetch K-line (candlestick) history from Binance
   Future<List<Map<String, dynamic>>> fetchKlines(String symbol, String interval, {int limit = 500}) async {
@@ -278,18 +344,29 @@ class BinanceService {
   }) async {
     final timestamp = DateTime.now().millisecondsSinceEpoch.toString();
     final formattedSymbol = symbol.replaceAll('-', '').replaceAll('/', '').toUpperCase();
+    final rules = await fetchSymbolRules(formattedSymbol);
+
     var queryParams = 'symbol=$formattedSymbol&side=${side.toUpperCase()}&type=${type.toUpperCase()}&recvWindow=5000&timestamp=$timestamp';
 
     if (type.toUpperCase() == 'LIMIT') {
       if (price == null || price <= 0 || size == null || size <= 0) {
         throw Exception('Precio y cantidad son requeridos para órdenes límite.');
       }
-      queryParams += '&timeInForce=GTC&price=$price&quantity=$size';
+      final sizeValidation = rules.validateSize(size);
+      if (sizeValidation != null) throw Exception(sizeValidation);
+
+      final priceStr = rules.formatPriceString(price);
+      final sizeStr = rules.formatSizeString(size);
+      queryParams += '&timeInForce=GTC&price=$priceStr&quantity=$sizeStr';
     } else {
       if (side.toUpperCase() == 'BUY' && funds != null && funds > 0) {
-        queryParams += '&quoteOrderQty=$funds';
+        final fundsValidation = rules.validateFunds(funds);
+        if (fundsValidation != null) throw Exception(fundsValidation);
+        queryParams += '&quoteOrderQty=${funds.toStringAsFixed(2)}';
       } else if (size != null && size > 0) {
-        queryParams += '&quantity=$size';
+        final sizeValidation = rules.validateSize(size);
+        if (sizeValidation != null) throw Exception(sizeValidation);
+        queryParams += '&quantity=${rules.formatSizeString(size)}';
       }
     }
 

@@ -264,7 +264,7 @@ async def run_collector():
                 except Exception as e:
                     print(f"[Error Collector Backfill] {ex_bf} {sym_bf}: {e}")
 
-            # 6. Actualizar latido saludable (Heartbeat) del worker
+            # 6. Actualizar latido saludable (Heartbeat) del recolector de velas
             await update_worker_heartbeat(pool, {
                 "active_symbols": len(active_symbols),
                 "pending_backfill": len(pending_backfill),

@@ -9,6 +9,12 @@ class Settings(BaseSettings):
     # Tiempo de reposo del colector entre ciclos (en segundos)
     COLLECTOR_SLEEP_SECONDS: int = 20
 
+    # Intervalo de evaluación del supervisor de bots en segundos (independiente del collector)
+    BOT_SUPERVISOR_INTERVAL_SECONDS: int = 60
+
+    # Webhook opcional de Discord para notificaciones de compras/ventas de bots
+    DISCORD_WEBHOOK_URL: str = ""
+
     # Token para autorizar llamadas a la API (cabecera 'X-API-Key')
     API_SECRET_TOKEN: str = "cryptoview_secret_default"
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
@@ -47,15 +48,17 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
   int? _draggingDrawingId;
   double? _visibleMinY;
   double? _visibleMaxY;
+  bool _isDrawingsPanelExpanded = false;
+  double _drawingsPanelHeight = 175.0;
+  Timer? _historyLoadDebounce;
+  DateTime? _lastHistoryLoadTime;
 
   void _handleZoomChange(ZoomPanArgs args) {
     if (args.axis?.name == 'primaryXAxis') {
       _userZoomFactor = args.currentZoomFactor;
       _userZoomPosition = args.currentZoomPosition;
       if (!_hasUserZoomedOrPanned) {
-        setState(() {
-          _hasUserZoomedOrPanned = true;
-        });
+        _hasUserZoomedOrPanned = true;
       }
     }
   }
@@ -64,19 +67,33 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
     if (args.axis?.name == 'primaryXAxis') {
       _userZoomFactor = args.currentZoomFactor;
       _userZoomPosition = args.currentZoomPosition;
-      if (!_hasUserZoomedOrPanned) {
-        setState(() {
-          _hasUserZoomedOrPanned = true;
-        });
-      }
+      _hasUserZoomedOrPanned = true;
+
+      // Debounce de 300ms: absorbe todos los giros rápidos de la rueda del ratón
+      // y lanza una única petición cuando el usuario detiene el giro en el borde izquierdo.
+      _historyLoadDebounce?.cancel();
       if (args.currentZoomPosition <= 0.05 && !_isTriggeringHistoryLoad) {
-        _checkAndLoadMoreHistory();
+        _historyLoadDebounce = Timer(const Duration(milliseconds: 300), () {
+          if (mounted &&
+              (_userZoomPosition ?? 1.0) <= 0.05 &&
+              !_isTriggeringHistoryLoad) {
+            _checkAndLoadMoreHistory();
+          }
+        });
       }
     }
   }
 
   Future<void> _checkAndLoadMoreHistory() async {
     if (!mounted || _isTriggeringHistoryLoad) return;
+
+    // Cooldown de 700ms para evitar ráfagas dobles
+    final now = DateTime.now();
+    if (_lastHistoryLoadTime != null &&
+        now.difference(_lastHistoryLoadTime!).inMilliseconds < 700) {
+      return;
+    }
+
     final chartProvider = Provider.of<ChartProvider>(context, listen: false);
     final watchlistProvider = Provider.of<WatchlistProvider>(context, listen: false);
     if (chartProvider.isLoading ||
@@ -87,6 +104,7 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
     }
 
     _isTriggeringHistoryLoad = true;
+    _lastHistoryLoadTime = now;
     final int oldLen = chartProvider.chartData.length;
     final double prevFactor = _userZoomFactor ?? (50.0 / oldLen).clamp(0.005, 1.0);
     final double prevPos = _userZoomPosition ?? 0.0;
@@ -98,13 +116,17 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
       );
       if (addedCount > 0 && mounted) {
         final int newLen = chartProvider.chartData.length;
-        final bool wasFullyZoomedOut = prevFactor >= 0.98;
-        final double newFactor = wasFullyZoomedOut
-            ? 1.0
-            : (prevFactor * (oldLen / newLen)).clamp(0.0005, 1.0);
-        final double newPos = wasFullyZoomedOut
-            ? 0.0
-            : (((prevPos * oldLen) + addedCount) / newLen).clamp(0.0, 1.0 - newFactor);
+        final bool wasZoomingOutFull = prevFactor >= 0.92;
+        // Si el usuario estaba alejando el zoom con la rueda (prevFactor >= 0.92),
+        // expandimos la ventana visible pero dejamos un 18% de margen (newFactor <= 0.82)
+        // para que Syncfusion no bloquee los siguientes giros de rueda en zoomFactor == 1.0.
+        final double newFactor = wasZoomingOutFull
+            ? ((oldLen + (addedCount * 0.5)) / newLen).clamp(0.65, 0.82)
+            : (prevFactor * (oldLen / newLen)).clamp(0.0005, 0.90);
+        final double newPos = wasZoomingOutFull
+            ? (1.0 - newFactor).clamp(0.08, 0.35)
+            : (((prevPos * oldLen) + addedCount) / newLen)
+                .clamp(0.0, 1.0 - newFactor);
 
         setState(() {
           _hasUserZoomedOrPanned = true;
@@ -116,9 +138,6 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
           if (mounted && _xAxisController != null) {
             _xAxisController!.zoomFactor = newFactor;
             _xAxisController!.zoomPosition = newPos;
-          }
-          if (mounted && newPos <= 0.08 && !chartProvider.hasReachedHistoryEnd) {
-            _checkAndLoadMoreHistory();
           }
         });
       }
@@ -207,6 +226,7 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
 
   @override
   void dispose() {
+    _historyLoadDebounce?.cancel();
     _mainTabController.removeListener(_handleTabChange);
     _mainTabController.dispose();
     super.dispose();
@@ -1048,14 +1068,23 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
           currentSymbol: currentSymbol,
           onClearAll: () => _showClearAllConfirmDialog(context, chartProvider, currentExchange, currentSymbol),
         ),
-        Expanded(
-          flex: 1,
-          child: ChartDrawingListPanel(
-            chartProvider: chartProvider,
-            currentExchange: currentExchange,
-            currentSymbol: currentSymbol,
-          ),
-        )
+        ChartDrawingListPanel(
+          chartProvider: chartProvider,
+          currentExchange: currentExchange,
+          currentSymbol: currentSymbol,
+          isExpanded: _isDrawingsPanelExpanded,
+          panelHeight: _drawingsPanelHeight,
+          onToggleExpand: () {
+            setState(() {
+              _isDrawingsPanelExpanded = !_isDrawingsPanelExpanded;
+            });
+          },
+          onVerticalDragUpdate: (dy) {
+            setState(() {
+              _drawingsPanelHeight = (_drawingsPanelHeight - dy).clamp(90.0, 380.0);
+            });
+          },
+        ),
       ],
     );
   }

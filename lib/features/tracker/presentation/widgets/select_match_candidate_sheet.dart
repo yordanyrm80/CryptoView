@@ -93,7 +93,7 @@ class _SelectMatchCandidateSheetState extends State<SelectMatchCandidateSheet> {
               controller: noteController,
               style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
               decoration: InputDecoration(
-                hintText: 'Ej. Amazon 1000 MXN, Walmart, etc.',
+                hintText: 'Ej. Pago de servicios, tarjeta de regalo, comercio...',
                 hintStyle: const TextStyle(color: AppColors.textMuted),
                 filled: true,
                 fillColor: AppColors.card,
@@ -144,7 +144,7 @@ class _SelectMatchCandidateSheetState extends State<SelectMatchCandidateSheet> {
   }) {
     final amountController = TextEditingController(text: _formatAmount(sourceRemaining));
     final noteController = TextEditingController();
-    String selectedCategory = 'Compra Amazon';
+    String selectedCategory = 'Comercio / Servicios';
 
     showDialog(
       context: context,
@@ -159,7 +159,7 @@ class _SelectMatchCandidateSheetState extends State<SelectMatchCandidateSheet> {
             children: [
               Icon(Icons.shopping_bag_outlined, color: Colors.orange, size: 20),
               SizedBox(width: 8),
-              Text('Marcar Compra como Gasto', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
+              Text('Conciliar Compra como Egreso', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.bold, fontSize: 16)),
             ],
           ),
           content: SingleChildScrollView(
@@ -168,7 +168,7 @@ class _SelectMatchCandidateSheetState extends State<SelectMatchCandidateSheet> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Esta compra saldrá de "Compras vivas" y ya no se mostrará como compra abierta en el gráfico.',
+                  'Esta orden se registrará como liquidada por consumo o retiro y dejará de mostrarse como posición abierta en el gráfico.',
                   style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
                 ),
                 const SizedBox(height: 12),
@@ -199,13 +199,13 @@ class _SelectMatchCandidateSheetState extends State<SelectMatchCandidateSheet> {
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.border)),
                   ),
                   items: const [
-                    DropdownMenuItem(value: 'Compra Amazon', child: Text('Compra Amazon')),
-                    DropdownMenuItem(value: 'Walmart / Cashi', child: Text('Walmart / Cashi')),
+                    DropdownMenuItem(value: 'Comercio / Servicios', child: Text('Comercio / Servicios')),
+                    DropdownMenuItem(value: 'Tarjeta de Regalo', child: Text('Tarjeta de Regalo')),
                     DropdownMenuItem(value: 'Gasto Personal', child: Text('Gasto Personal')),
-                    DropdownMenuItem(value: 'Store Credit', child: Text('Store Credit')),
-                    DropdownMenuItem(value: 'Recarga Móvil', child: Text('Recarga Móvil')),
-                    DropdownMenuItem(value: 'Entretenimiento', child: Text('Entretenimiento')),
-                    DropdownMenuItem(value: 'Otro Gasto', child: Text('Otro Gasto')),
+                    DropdownMenuItem(value: 'Transferencia Externa', child: Text('Transferencia Externa')),
+                    DropdownMenuItem(value: 'Recarga / Telecomunicaciones', child: Text('Recarga / Telecomunicaciones')),
+                    DropdownMenuItem(value: 'Suscripciones', child: Text('Suscripciones')),
+                    DropdownMenuItem(value: 'Otro Egreso', child: Text('Otro Egreso')),
                   ],
                   onChanged: (val) {
                     if (val != null) setDialogState(() => selectedCategory = val);
@@ -218,7 +218,7 @@ class _SelectMatchCandidateSheetState extends State<SelectMatchCandidateSheet> {
                   controller: noteController,
                   style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
                   decoration: InputDecoration(
-                    hintText: 'Ej. Amazon 1000 MXN, Bitrefill, etc.',
+                    hintText: 'Ej. Referencia del pago, proveedor o destino...',
                     hintStyle: const TextStyle(color: AppColors.textMuted),
                     filled: true,
                     fillColor: AppColors.card,

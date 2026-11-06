@@ -20,7 +20,6 @@ class MetricsHeaderCard extends StatelessWidget {
     final totalMatches = provider.filteredMatches.length;
     final balance = provider.quoteAssetBalance;
     final capitalInBuys = provider.capitalInOpenBuys;
-    final isOnlyCurrent = provider.filterOnlyCurrentSymbol;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -35,7 +34,7 @@ class MetricsHeaderCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // Filter Selector Header
+          // Active Symbol Header
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -44,7 +43,7 @@ class MetricsHeaderCard extends StatelessWidget {
                   const Icon(Icons.filter_list, size: 16, color: AppColors.primary),
                   const SizedBox(width: 6),
                   Text(
-                    isOnlyCurrent ? 'Filtrando: ${provider.activeSymbol}' : 'Mostrando: Todas las Monedas',
+                    'Filtrando: ${provider.activeSymbol}',
                     style: const TextStyle(
                       color: AppColors.textPrimary,
                       fontWeight: FontWeight.bold,
@@ -53,52 +52,20 @@ class MetricsHeaderCard extends StatelessWidget {
                   ),
                 ],
               ),
-              // Segmented Toggle Button
               Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: AppColors.card,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.border),
+                  color: AppColors.primary.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
                 ),
-                child: Row(
-                  children: [
-                    GestureDetector(
-                      onTap: () => provider.setFilterOnlyCurrentSymbol(true),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: isOnlyCurrent ? AppColors.primary : Colors.transparent,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          provider.currentBaseAsset,
-                          style: TextStyle(
-                            color: isOnlyCurrent ? AppColors.background : AppColors.textSecondary,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: () => provider.setFilterOnlyCurrentSymbol(false),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: !isOnlyCurrent ? AppColors.primary : Colors.transparent,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          'TODOS',
-                          style: TextStyle(
-                            color: !isOnlyCurrent ? AppColors.background : AppColors.textSecondary,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  provider.currentBaseAsset,
+                  style: const TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11,
+                  ),
                 ),
               ),
             ],

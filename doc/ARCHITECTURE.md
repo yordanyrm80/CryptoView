@@ -42,13 +42,18 @@ lib/
 │   ├── exchanges/                  # 4. Gestión de Exchanges y API Keys
 │   │   └── presentation/           # Configuración de claves, saldo y sincronizaciones
 │   │
-│   └── settings/                   # 5. Ajustes y conexión Cloud
+│   ├── bots/                       # 5. Centro de Mando de Flota de Bots Cuantitativos
+│   │   ├── domain/                 # Modelos ResumenBot, TramoBot, MetricasFlotaBots
+│   │   ├── presentation/           # BotsWorkspaceScreen (KPIs, escalera de tramos, despliegue)
+│   │   └── providers/              # BotsProvider (delega el 100% de red a CloudApiService)
+│   │
+│   └── settings/                   # 6. Ajustes y conexión Cloud
 │       ├── presentation/           # Pantalla de ajustes y CloudServerConfigSection
 │       └── providers/              # SettingsProvider (persistencia y migración de URL)
 │
-└── main.dart                       # Inicialización, MultiProvider y Scaffold responsivo
+└── main.dart                       # Inicialización, MultiProvider y Scaffold responsivo (Activity Dock)
 
-backend/                            # Motor Central de Ingestión 24/7 y API (/home/ubuntu/backend)
+backend/                            # Motor Central de Ingestión 24/7 y API Única (/home/ubuntu/backend)
 ├── app/
 │   ├── routers/                    # Endpoints FastAPI:
 │   │   ├── candles.py              # Velas con enrutamiento jerárquico optimizado y tickers
@@ -58,7 +63,8 @@ backend/                            # Motor Central de Ingestión 24/7 y API (/h
 │   │   ├── health.py               # Diagnóstico de base de datos y latido del worker
 │   │   ├── withdrawals.py          # Sincronización de retiros y gastos
 │   │   ├── matches.py              # Casamientos de operaciones compra/venta
-│   │   └── backup.py               # Exportación e importación de salvas integrales
+│   │   ├── backup.py               # Salva Ligera (.json.gz) y volcado nativo TimescaleDB (pg_dump / .sql.gz)
+│   │   └── bots.py                 # Gestión unificada de flota de bots (/api/v1/bots, métricas, tramos y capital)
 │   ├── services/
 │   │   ├── collector.py            # Colector 24/7 (tiempo real + backfill + auto-sync trades)
 │   │   ├── exchange_client.py      # Cliente unificado CCXT con descifrado AES en caliente
@@ -72,6 +78,19 @@ backend/                            # Motor Central de Ingestión 24/7 y API (/h
 ├── Caddyfile                       # Proxy inverso HTTPS automático (Let's Encrypt), headers de seguridad
 ├── Dockerfile                      # Imagen Python 3.12-slim compatible con ARM64
 └── docker-compose.yml              # Orquestación de 4 contenedores (caddy, api, worker, timescaledb)
+
+bot/                                # CriptoBot: Motor de Trading Cuantitativo Institucional
+├── src/
+│   ├── data_provider/              # Ingestión desacoplada (TimescaleMarketDataProvider vs ApiMarketDataProvider)
+│   ├── strategies/                 # Estrategias (Quantum Compound, Evolution, Adaptive Three-Regime)
+│   ├── core/                       # Ejecutor en vivo y detector de régimen de mercado
+│   ├── domain/                     # Modelos de dominio canónicos (BotConfig, Tranche, Order, Candle)
+│   ├── exchange/                   # Conector CCXT KuCoin Spot (ejecución y balance de subcuenta aislada)
+│   ├── storage/                    # Repositorios PostgreSQL / auditoría de capital inmutable
+│   └── api/                        # API FastAPI de control y canal WebSocket
+├── criptobot_ui/                   # UI Flutter móvil/escritorio para control y telemetría
+├── docs/                           # Manual Operativo Híbrido y bitácoras
+└── tests/                          # Suite de pruebas automatizadas pytest (43 tests pasando)
 ```
 
 ---
@@ -101,3 +120,13 @@ backend/                            # Motor Central de Ingestión 24/7 y API (/h
 5. **Monitoreo Reactivo de Latido (Worker Heartbeat)**:
    - El Ingestion Worker reporta su actividad periódicamente en `system_heartbeat`.
    - `/api/v1/health` inspecciona este registro para devolver si el worker está `online` (<90s) o `stalled`, permitiendo diagnósticos inmediatos desde la app o scripts externos.
+
+6. **Desacoplamiento de Datos en CriptoBot (`MarketDataProvider`)**:
+   - El bot cuantitativo no consulta a exchanges externos para velas OHLCV. En su lugar, utiliza el patrón abstracto `MarketDataProvider` configurable por la variable de entorno `DATA_SOURCE_MODE`:
+     - **`database`**: Consultas directas SQL a TimescaleDB (`candles_1h`, `candles_5m`, `candles_1d`, `market_candles`) con latencia `< 1ms`, ideal cuando el bot corre co-ubicado en el servidor central.
+     - **`api`**: Consultas remotas HTTPS a la API de CryptoView (`CryptoViewClient` con cabecera `X-API-Key`), ideal cuando el bot corre en un VPS independiente (como Tokio) o en local.
+   - La librería CCXT se reserva exclusivamente para trading spot y balances en subcuentas de KuCoin.
+
+7. **Arquitectura de Respaldo Dual y Continuidad de Negocio**:
+   - **Salva Ligera de Cuenta & Trades (`.json.gz`)**: Diseñada para la app móvil y de escritorio; genera y restaura atómicamente el estado contable en ~1 segundo (<1 MB).
+   - **Salva Completa con Series Temporales (`.sql.gz`)**: Diseñada para la base de datos central en producción; utiliza `pg_dump | gzip` en background para respaldar más de 7.67 millones de velas sin bloquear lecturas ni agotar la memoria, descargable en streaming y restaurable con comandos nativos de PostgreSQL.

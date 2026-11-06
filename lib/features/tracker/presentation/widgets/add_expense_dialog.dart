@@ -175,7 +175,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
               controller: _descriptionController,
               style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
               decoration: InputDecoration(
-                hintText: 'Ej. Amazon México 1000 MXN, Cashi Walmart, etc.',
+                hintText: 'Ej. Pago de servicios, tarjeta de regalo, retiro...',
                 hintStyle: const TextStyle(color: AppColors.textMuted),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 filled: true,
@@ -205,7 +205,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                           fillColor: AppColors.card,
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.border)),
                         ),
-                        items: ['Gasto Personal', 'Compra Amazon', 'Walmart / Cashi', 'Retiro Billetera', 'Otros']
+                        items: ['Gasto Personal', 'Comercio / Servicios', 'Tarjeta de Regalo', 'Retiro Billetera', 'Otros']
                             .map((e) => DropdownMenuItem(value: e, child: Text(e, overflow: TextOverflow.ellipsis)))
                             .toList(),
                         onChanged: (v) {

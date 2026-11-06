@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from app.database import init_db_pool, close_db_pool
 from app.auth import verify_api_key
-from app.routers import candles, trades, symbols, health, api_keys, backup, withdrawals, matches
+from app.routers import candles, trades, symbols, health, api_keys, backup, withdrawals, matches, bots
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -49,6 +49,7 @@ app.include_router(api_keys.router)
 app.include_router(withdrawals.router)
 app.include_router(matches.router)
 app.include_router(backup.router)
+app.include_router(bots.router)
 
 @app.get("/")
 async def root():
