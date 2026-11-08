@@ -219,6 +219,61 @@ Future<void> showBotCreateDialog(
                         );
                       }).toList(),
                     ),
+                    if (provider.marketRadar != null && symbolCtrl.text.trim().toUpperCase().contains('BTC')) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: (provider.marketRadar!.entryRadar.isIdealEntry
+                                  ? AppColors.bull
+                                  : (provider.marketRadar!.entryRadar.trafficLight == 'RED'
+                                      ? AppColors.bear
+                                      : Colors.amber))
+                              .withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: (provider.marketRadar!.entryRadar.isIdealEntry
+                                    ? AppColors.bull
+                                    : (provider.marketRadar!.entryRadar.trafficLight == 'RED'
+                                        ? AppColors.bear
+                                        : Colors.amber))
+                                .withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              provider.marketRadar!.entryRadar.isIdealEntry
+                                  ? Icons.check_circle_outline
+                                  : (provider.marketRadar!.entryRadar.trafficLight == 'RED'
+                                      ? Icons.warning_amber_rounded
+                                      : Icons.info_outline),
+                              size: 14,
+                              color: provider.marketRadar!.entryRadar.isIdealEntry
+                                  ? AppColors.bull
+                                  : (provider.marketRadar!.entryRadar.trafficLight == 'RED'
+                                      ? AppColors.bear
+                                      : Colors.amber),
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                'Radar Macro: ${provider.marketRadar!.entryRadar.title}',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: provider.marketRadar!.entryRadar.isIdealEntry
+                                      ? AppColors.bull
+                                      : (provider.marketRadar!.entryRadar.trafficLight == 'RED'
+                                          ? AppColors.bear
+                                          : Colors.amber),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 14),
 
                     // 2. Combo de Estrategia

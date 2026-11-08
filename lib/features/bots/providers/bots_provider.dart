@@ -12,6 +12,7 @@ class BotsProvider extends ChangeNotifier {
   DateTime? _lastSyncTime;
 
   MetricasFlotaBots? _metricas;
+  MarketRadarData? _marketRadar;
   List<ResumenBot> _bots = [];
   final Map<String, List<TramoBot>> _tramosPorBot = {};
   AjustesMotorBots? _ajustes;
@@ -29,6 +30,7 @@ class BotsProvider extends ChangeNotifier {
   String? get lastError => _lastError;
   DateTime? get lastSyncTime => _lastSyncTime;
   MetricasFlotaBots? get metricas => _metricas;
+  MarketRadarData? get marketRadar => _marketRadar;
   List<ResumenBot> get todosLosBots => _bots;
   AjustesMotorBots? get ajustes => _ajustes;
   List<ConfiguracionEstrategiaBot> get configuracionesEstrategia =>
@@ -171,6 +173,12 @@ class BotsProvider extends ChangeNotifier {
         _isConnected = true;
         _lastError = null;
         _lastSyncTime = DateTime.now();
+        try {
+          final radarJson = await api.fetchMarketRadar(symbol: 'BTC/USDT');
+          if (radarJson != null) {
+            _marketRadar = MarketRadarData.fromJson(radarJson);
+          }
+        } catch (_) {}
       } else {
         _isConnected = false;
         _lastError =
@@ -410,5 +418,15 @@ class BotsProvider extends ChangeNotifier {
       await cargarDatos(silencioso: true);
     }
     return res;
+  }
+
+  Future<void> actualizarRadarMercado({String symbol = 'BTC/USDT'}) async {
+    try {
+      final radarJson = await CloudApiService.instance.fetchMarketRadar(symbol: symbol);
+      if (radarJson != null) {
+        _marketRadar = MarketRadarData.fromJson(radarJson);
+        notifyListeners();
+      }
+    } catch (_) {}
   }
 }

@@ -488,3 +488,151 @@ class EventoAuditoriaBot {
     );
   }
 }
+
+
+class RadarEntrySignal {
+  final String status;
+  final String trafficLight;
+  final String title;
+  final String recommendation;
+  final bool isIdealEntry;
+  final double historicalWinRate1yPct;
+  final double historicalAvgReturn1yPct;
+
+  const RadarEntrySignal({
+    required this.status,
+    required this.trafficLight,
+    required this.title,
+    required this.recommendation,
+    required this.isIdealEntry,
+    required this.historicalWinRate1yPct,
+    required this.historicalAvgReturn1yPct,
+  });
+
+  factory RadarEntrySignal.fromJson(Map<String, dynamic> json) {
+    return RadarEntrySignal(
+      status: (json['status'] ?? 'NEUTRAL_RANGE').toString(),
+      trafficLight: (json['traffic_light'] ?? 'YELLOW').toString(),
+      title: (json['title'] ?? 'Régimen Normal').toString(),
+      recommendation: (json['recommendation'] ?? '').toString(),
+      isIdealEntry: json['is_ideal_entry'] == true,
+      historicalWinRate1yPct:
+          ((json['historical_win_rate_1y_pct'] ?? 0.0) as num).toDouble(),
+      historicalAvgReturn1yPct:
+          ((json['historical_avg_return_1y_pct'] ?? 0.0) as num).toDouble(),
+    );
+  }
+}
+
+class RadarExitSignal {
+  final String status;
+  final String trafficLight;
+  final String title;
+  final String recommendation;
+  final bool isExitWarning;
+  final String suggestedAction;
+
+  const RadarExitSignal({
+    required this.status,
+    required this.trafficLight,
+    required this.title,
+    required this.recommendation,
+    required this.isExitWarning,
+    required this.suggestedAction,
+  });
+
+  factory RadarExitSignal.fromJson(Map<String, dynamic> json) {
+    return RadarExitSignal(
+      status: (json['status'] ?? 'HEALTHY_TREND').toString(),
+      trafficLight: (json['traffic_light'] ?? 'GREEN').toString(),
+      title: (json['title'] ?? 'Estructura Saludable').toString(),
+      recommendation: (json['recommendation'] ?? '').toString(),
+      isExitWarning: json['is_exit_warning'] == true,
+      suggestedAction: (json['suggested_action'] ?? 'NONE').toString(),
+    );
+  }
+}
+
+class PiCycleMetrics {
+  final double sma111d;
+  final double sma350dx2;
+  final double piRatio;
+  final bool isTriggered;
+
+  const PiCycleMetrics({
+    required this.sma111d,
+    required this.sma350dx2,
+    required this.piRatio,
+    required this.isTriggered,
+  });
+
+  factory PiCycleMetrics.fromJson(Map<String, dynamic> json) {
+    return PiCycleMetrics(
+      sma111d: ((json['sma_111d'] ?? 0.0) as num).toDouble(),
+      sma350dx2: ((json['sma_350d_x2'] ?? 0.0) as num).toDouble(),
+      piRatio: ((json['pi_ratio'] ?? 0.0) as num).toDouble(),
+      isTriggered: json['is_triggered'] == true,
+    );
+  }
+}
+
+class MarketRadarData {
+  final String symbol;
+  final DateTime calculatedAt;
+  final double currentPrice;
+  final double athPrice;
+  final double dailyEma200;
+  final double dailyEma50;
+  final double dailyRsi;
+  final double distDailyEma200Pct;
+  final double drawdownFromAthPct;
+  final double daysAboveDailyEma200;
+  final int daysSinceLastHalving;
+  final RadarEntrySignal entryRadar;
+  final RadarExitSignal exitRadar;
+  final PiCycleMetrics piCycleMetrics;
+
+  const MarketRadarData({
+    required this.symbol,
+    required this.calculatedAt,
+    required this.currentPrice,
+    required this.athPrice,
+    required this.dailyEma200,
+    required this.dailyEma50,
+    required this.dailyRsi,
+    required this.distDailyEma200Pct,
+    required this.drawdownFromAthPct,
+    required this.daysAboveDailyEma200,
+    required this.daysSinceLastHalving,
+    required this.entryRadar,
+    required this.exitRadar,
+    required this.piCycleMetrics,
+  });
+
+  factory MarketRadarData.fromJson(Map<String, dynamic> json) {
+    return MarketRadarData(
+      symbol: (json['symbol'] ?? 'BTC/USDT').toString(),
+      calculatedAt: DateTime.tryParse(json['calculated_at']?.toString() ?? '') ??
+          DateTime.now(),
+      currentPrice: ((json['current_price'] ?? 0.0) as num).toDouble(),
+      athPrice: ((json['ath_price'] ?? 0.0) as num).toDouble(),
+      dailyEma200: ((json['daily_ema_200'] ?? 0.0) as num).toDouble(),
+      dailyEma50: ((json['daily_ema_50'] ?? 0.0) as num).toDouble(),
+      dailyRsi: ((json['daily_rsi'] ?? 50.0) as num).toDouble(),
+      distDailyEma200Pct:
+          ((json['dist_daily_ema_200_pct'] ?? 0.0) as num).toDouble(),
+      drawdownFromAthPct:
+          ((json['drawdown_from_ath_pct'] ?? 0.0) as num).toDouble(),
+      daysAboveDailyEma200:
+          ((json['days_above_daily_ema_200'] ?? 0.0) as num).toDouble(),
+      daysSinceLastHalving:
+          ((json['days_since_last_halving'] ?? 0) as num).toInt(),
+      entryRadar: RadarEntrySignal.fromJson(
+          json['entry_radar'] is Map ? json['entry_radar'] : {}),
+      exitRadar: RadarExitSignal.fromJson(
+          json['exit_radar'] is Map ? json['exit_radar'] : {}),
+      piCycleMetrics: PiCycleMetrics.fromJson(
+          json['pi_cycle_metrics'] is Map ? json['pi_cycle_metrics'] : {}),
+    );
+  }
+}

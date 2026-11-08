@@ -12,6 +12,7 @@ import 'widgets/bot_config_dialog.dart';
 import 'widgets/bot_capital_dialog.dart';
 import 'widgets/bot_create_dialog.dart';
 import 'widgets/bot_strategy_params_dialog.dart';
+import 'widgets/market_radar_card.dart';
 
 class BotsWorkspaceScreen extends StatefulWidget {
   final ValueChanged<String>? onOpenSymbolInChart;
@@ -156,6 +157,7 @@ class _BotsWorkspaceScreenState extends State<BotsWorkspaceScreen> {
                 children: [
                   if (!botsProvider.isConnected)
                     _buildOfflineBanner(context, botsProvider),
+                  MarketRadarCard(botsProvider: botsProvider),
                   _buildFleetMetricsGrid(botsProvider),
                   const SizedBox(height: 20),
                   _buildFilterAndSearchBar(botsProvider),

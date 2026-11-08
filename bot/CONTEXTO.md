@@ -180,6 +180,24 @@ Tras el análisis cuantitativo sobre **9 años completos de datos históricos re
 
 ---
 
+#### K. Radar de Ciclo Macro de Bitcoin (Detección Cuantitativa de Entradas y Salidas)
+- **Premisa de Investigación:** Determinar empíricamente si existen condiciones macro objetivas de mercado que identifiquen:
+  1. Los mejores momentos para lanzar bots nuevos o inyectar capital sin riesgo de quedar atrapado.
+  2. Los mejores momentos para desescalar o pausar recompras hacia USDT líquido antes de desplomes seculares (-70%).
+- **Resultados de las Simulaciones a 9 Años (2017 – 2026, 79,305 velas, capital $2,000 inicial):**
+  1. **Arquetipos de Entrada Comprobados:**
+     * *Pozo de Capitulación (Caída > 55-60% desde ATH + RSI Diario < 32):* Es el arquetipo con mayor multiplicador asimétrico. Retorno medio a 1 año de **+211.1%** (extrayendo entre $1,600 y $6,100 en efectivo) y **+345.5% a 2 años** ($2,000 se convierten en ~$9,000 USDT).
+     * *Ventana Dorada (Precio cruza y consolida sobre Daily EMA 200 con RSI en [45, 60]):* La entrada más segura. Retorno medio a 1 año de **+136.1%**, **100% de Win Rate** y **0 días de capital atrapado**.
+     * *Compresión Post-Halving (Meses 3 a 6 post-halving sobre EMA 200):* Absorción de oferta que precede grandes expansiones seculares (+170% a 1 año).
+     * *Zona Roja de Euforia (>50% sobre EMA 200 + RSI > 72):* Entrada de alto riesgo. Pérdidas flotantes de **-29% a -65%** en el primer año y capital atrapado durante más de 380 días.
+  2. **Arquetipos de Salida Macro Comprobados:**
+     * *Pi Cycle Top (SMA 111d >= SMA 350d * 2):* Detectó el techo de Abril de 2021 a $59,819 (48h antes del ATH). Salir a USDT líquido en la alerta preservó el 100% del capital y permitió comprar **0.1278 BTC en el suelo frente a solo 0.0473 BTC** si el bot se comía el invierno (+170% más Bitcoin acumulado).
+     * *Ruptura Estructural tras ATH (Pérdida de la Daily EMA 50):* Detectó el segundo techo de Noviembre de 2021 a $60,496. Salir a USDT líquido permitió comprar **0.1278 BTC en el suelo frente a 0.0425 BTC** (+200% más Bitcoin).
+- **Filosofía de Implementación en el Sistema:**
+  * **100% CONSULTIVO E INFORMATIVO:** El radar se expone vía API (`GET /api/v1/market-radar`) y en la interfaz de usuario como un semáforo visual con métricas cuantitativas de apoyo. **NUNCA bloquea ni limita al usuario**, respetando su total soberanía operativa.
+
+---
+
 ### ESTRATEGIA 2: ETH/USDT y LTC/USDT – Motor Adaptativo de Oscilación Rápida (Grid Compacto)
 
 Diseñada para altcoins con alto ruido, reversión a la media constante y rangos horizontales amplios:

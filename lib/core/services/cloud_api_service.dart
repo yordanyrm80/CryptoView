@@ -663,4 +663,19 @@ class CloudApiService {
       };
     }
   }
+
+  /// Consulta el Radar de Ciclo Macro (`GET /api/v1/market-radar/{symbol}`)
+  Future<Map<String, dynamic>?> fetchMarketRadar({String symbol = 'BTC/USDT'}) async {
+    try {
+      final s = Uri.encodeComponent(symbol.replaceAll('-', '/').toUpperCase());
+      final uri = Uri.parse('$baseUrl/api/v1/market-radar/$s');
+      final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      debugPrint('[CloudApiService] Error en fetchMarketRadar ($symbol): $e');
+    }
+    return null;
+  }
 }
