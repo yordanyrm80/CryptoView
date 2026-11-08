@@ -197,6 +197,7 @@ class SimulationEngine:
             free_harvested_btc=portfolio.harvested_btc_free,
         )
 
+        self.last_portfolio = portfolio
         return metrics, equity_series, portfolio.completed_tranches
 
     def execute(self, strategy: BaseStrategy, df_candles: pd.DataFrame, initial_capital: float = 1000.0, **kwargs):

@@ -17,6 +17,16 @@ Este archivo sirve como referencia de contexto rápido para las herramientas, la
   `/data/data/com.cryptoview/databases/cryptoview.db` (en AVD: `invera_phone`)
 * **Herramientas Android SDK**:
   `C:\Users\yordany\AppData\Local\Android\Sdk\platform-tools\adb.exe`
+* **Herramienta PostgreSQL Cliente (psql)**:
+  `C:\Program Files\pgAdmin 4\runtime\psql.exe`
+* **PostgreSQL Local (Entorno Aislado de Pruebas y Simulaciones)**:
+  - Host: 127.0.0.1
+  - Puerto: 5432
+  - Usuario: postgres
+  - Clave: postgres
+  - Base de Datos de Pruebas: CryptoViewPruebas
+  - Aislamiento Total: Esta base de datos es EXCLUSIVAMENTE para pruebas, simulaciones y analisis offline. NO tiene ninguna relacion, sincronizacion ni efecto sobre el sistema productivo, el servidor en Oracle Cloud ni la app en produccion.
+  - Metodo de Conexion: Conectar SIEMPRE directamente usando el cliente psql de Windows (`C:\Program Files\pgAdmin 4\runtime\psql.exe`). NO conectarse ni ejecutar comandos dentro de Docker.
 
 ---
 
