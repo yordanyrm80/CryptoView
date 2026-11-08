@@ -605,4 +605,34 @@ async def delete_pg_dump_file(filename: str):
 
     raise HTTPException(status_code=404, detail="Archivo no encontrado.")
 
+@router.post("/pg_dump/purge_older")
+async def purge_older_pg_dumps(keep: int = Query(1, ge=1, description="Cantidad de volcados más recientes a conservar")):
+    """
+    Elimina los volcados antiguos en el servidor dejando únicamente los 'keep' más recientes para liberar almacenamiento.
+    """
+    dumps = []
+    if BACKUPS_DIR.exists():
+        for f in BACKUPS_DIR.glob("*.sql.gz"):
+            dumps.append(f)
+
+    # Ordenar por fecha de modificación descendente (el más reciente primero)
+    dumps.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+
+    to_delete = dumps[keep:]
+    deleted_count = 0
+    freed_bytes = 0
+    for f in to_delete:
+        try:
+            freed_bytes += f.stat().st_size
+            f.unlink()
+            deleted_count += 1
+        except Exception:
+            pass
+
+    return {
+        "status": "ok",
+        "deleted_count": deleted_count,
+        "freed_mb": round(freed_bytes / (1024 * 1024), 2),
+        "kept_count": min(len(dumps), keep),
+    }
 
