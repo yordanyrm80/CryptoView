@@ -11,6 +11,30 @@
 
 ---
 
+## Estructura del Repositorio y Separación Estricta de Entornos
+
+Para garantizar que jamás se mezclen el entorno productivo y el de investigación/simulación:
+
+1. **`backend/` — PRODUCCIÓN EN VIVO (Oracle Cloud OCI 24/7):**
+   - **Rol:** Servidor productivo en la nube que ejecuta la flota de bots y la API REST en tiempo real.
+   - **Código Real del Algoritmo en Producción:** `backend/app/strategies/quantum_evolution.py` (`BtcQuantumEvolutionRegimeStrategy`).
+   - **Supervisor y Ejecución en Vivo:** `backend/app/services/bot_supervisor.py` (demonio 24/7 que evalúa velas, conecta con KuCoin vía CCXT, emite órdenes Limit, gestiona interés compuesto y notifica a Discord).
+   - **Controlador REST:** `backend/app/routers/bots.py` (rutas `/api/v1/bots`).
+   - **PROHIBICIÓN ESTRICTA:** NUNCA colocar scripts de backtest, código de simulación histórica, datasets temporales ni utilerías experimentales en `backend/`. Debe permanecer 100% limpio y optimizado para producción.
+
+2. **`bot/` — LABORATORIO CUANTITATIVO, BACKTESTING Y UTILIDADES (Offline/Local):**
+   - **Rol:** Banco de pruebas cuantitativo donde se simulan, investigan y calibran las estrategias sobre 9 años de histórico (79,000+ velas) sin tocar producción.
+   - **Motor de Simulación:** `bot/src/simulation/engine.py` (`SimulationEngine`).
+   - **Estrategia Espejo de Investigación:** `bot/src/strategies/btc_quantum_evolution_regime.py`.
+   - **Scripts de Análisis y Benchmarking:** Directorio `bot/scripts/` (pruebas de Satoshi Accumulator, simulaciones de optimización de ETH, cálculo de CAGR y scripts de restauración de backups).
+   - **Bitácora Única de Verdad:** `bot/CONTEXTO.md`.
+   - **PROHIBICIÓN ESTRICTA:** Este código NUNCA se despliega en producción en Oracle Cloud.
+
+3. **`lib/` — CLIENTE DE USUARIO (Flutter Desktop & Mobile):**
+   - **Rol:** Aplicación cliente (Windows Runner y Móvil) que consume exclusivamente la API REST de `backend/` a través de HTTP/HTTPS con autenticación `X-API-Key`. No interactúa directamente con `bot/`.
+
+---
+
 ## Stack Tecnológico y Lenguaje
 - **Lenguaje:** **Python 3.12** (versión fija estándar para paridad 1:1 entre entorno de desarrollo local en Windows y servidor en producción Ubuntu 24.04 LTS en Tokio, evitando repositorios externos y discrepancias de wheels binarias). Asíncrono con `asyncio`.
 - **Estándar de Código e Idioma:** **100% INGLÉS para toda la programación** (nombres de clases, métodos, variables, firmas de funciones, modelos de datos, endpoints internos y comentarios técnicos). Se prohíbe el código bilingüe ("Spanglish") y las capas innecesarias de alias dobles. El español queda reservado exclusivamente para la interfaz de usuario final (UI en Flutter), mensajes/notificaciones push de cara al usuario y documentación analítica de negocio.
