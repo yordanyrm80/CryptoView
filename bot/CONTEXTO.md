@@ -198,6 +198,57 @@ Tras el análisis cuantitativo sobre **9 años completos de datos históricos re
 
 ---
 
+#### L. Análisis Comparativo Cuantitativo: Ethereum (Apex ETH Ultra) vs. Bitcoin (Apex Titan BTC Flagship) [2017 – 2026, 79,234 velas]
+- **Premisa de Investigación:** Determinar empíricamente si adaptando el algoritmo a la mayor volatilidad de Ethereum se puede maximizar su rendimiento conservando el 100% de las bases de seguridad (Mercado Spot puro, órdenes Limit, cero apalancamiento, cero ventas a pérdida).
+- **Diagnóstico Estadístico de la Naturaleza de ETH vs BTC (2017 - 2026, 3,310 días):**
+  1. *Mayor Volatilidad y Amplitud:* ETH presenta una volatilidad diaria de **4.53%** frente a **3.53%** de BTC (28.3% más volátil), con una amplitud diaria promedio de **6.48%** (mediana 5.16%) vs **5.00%** de BTC.
+  2. *Mayor Frecuencia de Movimientos Fuertes:* El **22.2%** de los días en ETH tienen oscilaciones absolutas superiores al 4.5% (vs 14.4% en BTC).
+  3. *Inviernos Más Devastadores:* ETH cayó **-94.02%** en el invierno de 2018 ($1,420 -> $82) frente a -81.38% en BTC, y **-79.30%** en 2022 ($4,800 -> $880) frente a -76.63% en BTC.
+  4. *Divergencia del Activo Subyacente en 9 Años:* El precio de Bitcoin subió **+1,866.0%** ($3,812 -> $74,944, multiplicador 19.6x), mientras Ethereum subió **+618.6%** ($298 -> $2,141, multiplicador 7.18x). BTC tuvo casi 3 veces más viento de cola en el valor de su moneda.
+
+- **La Calibración Campeona para Ethereum (`Apex ETH Ultra`):**
+  * **Take Profit Ágil al 4.2% (vs 4.5% o superior):** Al ajustarse a la mediana de oscilación diaria (5.16%), incrementa drásticamente las rotaciones completas de tramos de 199 a 282 trades, acelerando el interés compuesto (*compounding*).
+  * **Trend Dominance en Bull Market al 85% (vs 70%):** En los rallies parabólicos de ETH (donde históricamente sube 40x a 50x), el bot compromete el 85% del capital con Trailing Stop (1.4% a 2.0%), evitando dejar capital ocioso en liquidez.
+  * **Escudo de Suelo Reforzado al 50% (vs 40%):** Cuando los tramos base se agotan en inviernos severos (-80% a -94%), inyecta el 50% de la liquidez restante en cada compra de pánico extremo ($RSI < 28$), promediando en los suelos absolutos ($85 en 2018, $900 en 2022).
+
+- **Matriz Comparativa Manzanas con Manzanas (Dataset Idéntico: 18 Octubre 2017 a 09 Noviembre 2026, $1,000 inicial):**
+
+| Estrategia y Configuración | Capital Final ($1,000 inicial) | Retorno Total | Max Floating DD | Total Trades | Win Rate | Sharpe Ratio | Profit Factor |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **ETH con Parámetros BTC (Línea Base)** | $29,042.41 | +2,804.2% | -86.9% | 199 | 97.5% | 0.87 | 55.33 |
+| **Apex ETH Ultra (Calibración Nativa ETH)** | **$55,155.95** | **+5,415.6%** | **-80.0%** | **282** | **94.7%** | **0.98** | **34.74** |
+| **Apex Titan BTC Flagship (Calibración BTC)** | **$71,344.99** | **+7,034.5%** | **-73.7%** | **231** | **93.9%** | **1.03** | **45.88** |
+
+- **Resolución de la Paradoja Dólares vs Alfa:**
+  * **Por qué BTC acumuló más dólares ($71.3k vs $55.1k):** Porque el activo subyacente Bitcoin se apreció casi 3 veces más que Ethereum en estos 9 años (+1,866% vs +618%).
+  * **Eficiencia Pura del Algoritmo (Multiplicador de Alfa sobre el Mercado):**
+    - En Bitcoin: El mercado hizo +1,866% y el bot generó +7,034% (**3.76x sobre el mercado**).
+    - En Ethereum: El mercado hizo +618% y el bot generó +5,415% (**8.75x sobre el mercado**).
+    - **Conclusión:** El algoritmo es **más del doble de eficiente en Ethereum (8.75x vs 3.76x)**, convirtiendo una ganancia modesta del activo (+618%) en un retorno masivo (+5,415%) mediante rotación pura.
+
+- **Desglose de Rendimiento Año por Año (Comparativa de Sinergia de Flota):**
+
+| Año | Régimen Dominante | Retorno BTC Flagship | Retorno ETH Ultra | Dinámica del Ciclo |
+| :---: | :--- | :---: | :---: | :--- |
+| **2017** | *Mega Bull Run* | +954.4% | **+1344.8%** | ETH lidera con tracción parabólica. |
+| **2018** | *Invierno Cripto (-84% / -94%)* | -58.0% | **-49.9%** | El bot amortigua fuertemente la caída frente al mercado. |
+| **2019** | *Rebote BTC / Altcoin Winter* | **+78.9%** | -0.6% | BTC lidera la salida del invierno; ETH lateraliza. |
+| **2020** | *Halving / Inicio Expansión* | **+204.8%** | +164.6% | Explosión de liquidez y rotación de tramos. |
+| **2021** | *Altseason Histórica* | +62.2% | **+289.1%** | **ETH aplasta a BTC (4.6x de ganancia relativa).** |
+| **2022** | *Invierno Cripto (-77% / -79%)* | -46.8% | -54.9% | Preservación de capital y recarga de tramos de suelo. |
+| **2023** | *Recuperación Cripto* | **+98.2%** | +53.4% | Rescate de tramos en rango. |
+| **2024** | *Ciclo ETFs Institucionales* | **+92.4%** | +33.8% | Viento de cola institucional en Bitcoin. |
+| **2025** | *Consolidación / Rango* | -4.7% | **+6.6%** | Rotación en rango favorable para micro-oscilaciones de ETH. |
+| **2026** | *Año en curso* | -5.8% | -24.4% | Acumulación de liquidez en corrección. |
+
+- **Recomendación para la Arquitectura de Flota:**
+  * No elegir entre uno u otro: **operar ambos en paralelo**.
+  * El bot de BTC captura el valor monetario macro y las fases de dominio institucional (como 2019 y 2024).
+  * El bot de ETH explota las fases de altseason y la hiper-rotación en rango (como 2017 y 2021), generando 8.75x de alfa.
+
+---
+
+
 ### ESTRATEGIA 2: ETH/USDT y LTC/USDT – Motor Adaptativo de Oscilación Rápida (Grid Compacto)
 
 Diseñada para altcoins con alto ruido, reversión a la media constante y rangos horizontales amplios:
