@@ -271,7 +271,14 @@ El motor algorítmico institucional (`bot/`) implementa una arquitectura desacop
 ## 10. Notas Operativas del Entorno Local (Windows)
 
 * **`flutter analyze`, `dart analyze` y tests Python con `asyncio`**: En Windows, el sandbox de terminal bloquea los sockets locales (`socketpair()` / servidor de análisis de Dart VM), provocando que estos comandos queden congelados indefinidamente. Cuando se detecte este entorno, deben ejecutarse con acceso completo (`BypassSandbox: true`) desde el primer reintento, o bien usar `--no-pub` cuando no haga falta resolver dependencias.
-* **`git push` a GitHub**: El remoto `origin` usa HTTPS con `credential.helper=manager`. En sesiones no interactivas sin token cacheado en Windows Credential Manager, `git push` debe ser ejecutado por el usuario desde una terminal interactiva para completar la autenticación OAuth/GCM.
+* **`git push` a GitHub (detección rápida de sesión expirada)**: El remoto `origin` usa HTTPS con `credential.helper=manager`. Antes de lanzar `git push origin develop`, verificar en <1s si existe sesión activa ejecutando:
+  ```powershell
+  git credential-manager github list
+  ```
+  Y ejecutar siempre el `git push` en modo no interactivo (`$env:GIT_TERMINAL_PROMPT="0"; $env:GCM_INTERACTIVE="never"`) para que nunca se quede colgado esperando una ventana OAuth oculta. Si `git credential-manager github list` devuelve vacío o el push falla por credenciales, avisar de inmediato al usuario para que ejecute en su terminal interactiva:
+  ```powershell
+  git credential-manager github login
+  ```
 
 
 
