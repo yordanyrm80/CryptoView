@@ -185,6 +185,29 @@ class ConfiguracionEstrategiaBot {
       ];
 
   /// Configuración Recomendada oficial e inviolable validada en 9 años (2017-2026)
+  /// Configuración Oficial Campeona para Ethereum validada en 9 años (+5,415%)
+  static const ConfiguracionEstrategiaBot recomendadaEthUltra =
+      ConfiguracionEstrategiaBot(
+    id: 'recommended_eth_ultra',
+    nombreEstrategia: 'BtcQuantumEvolutionRegimeStrategy',
+    nombre: 'Configuración Campeona ETH Ultra',
+    descripcion:
+        'Calibración óptima para Ethereum (+5,415% en 9 años): TP 4.2%, Trailing Stop 1.4%, Tendencia 85%, 5 Tramos Base [30/25/20/15/10%] + 3 Suelo [50/35/25%], RSI T0 48.0, RSI Pánico 28.0.',
+    esRecomendada: true,
+    esSistema: true,
+    takeProfitPct: 4.2,
+    trailingStopPct: 1.4,
+    pesoTendencia: 0.85,
+    maxTramosBase: 5,
+    tramosSueloExtra: 3,
+    pesosTramosBase: [0.30, 0.25, 0.20, 0.15, 0.10],
+    pesosTramosSuelo: [0.50, 0.35, 0.25],
+    umbralRsiT0: 48.0,
+    umbralRsiPanico: 28.0,
+    atrMultiplier: 1.5,
+    interesCompuesto: true,
+  );
+
   static const ConfiguracionEstrategiaBot recomendadaQuantumEvolution =
       ConfiguracionEstrategiaBot(
     id: 'recommended_btc_quantum_evolution',

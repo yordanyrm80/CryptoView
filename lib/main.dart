@@ -22,6 +22,7 @@ import 'features/orderbook/providers/orderbook_provider.dart';
 import 'features/trading/providers/trading_provider.dart';
 import 'features/bots/providers/bots_provider.dart';
 import 'features/bots/presentation/bots_workspace_screen.dart';
+import 'features/bots/presentation/market_radar_workspace_screen.dart';
 
 import 'core/widgets/panel_resize_handle.dart';
 import 'core/widgets/cloud_engine_status_pill.dart';
@@ -157,6 +158,14 @@ class _MainContainerState extends State<MainContainer> {
           const SizedBox(height: 4),
           _buildDockItem(
             index: 2,
+            icon: Icons.radar_outlined,
+            activeIcon: Icons.radar,
+            label: 'Radar',
+            tooltip: 'Radar de Ciclos y Oportunidades de Mercado',
+          ),
+          const SizedBox(height: 4),
+          _buildDockItem(
+            index: 3,
             icon: Icons.currency_exchange,
             activeIcon: Icons.currency_exchange,
             label: 'Exchanges',
@@ -165,7 +174,7 @@ class _MainContainerState extends State<MainContainer> {
           const Spacer(),
           const Divider(color: AppColors.divider, indent: 10, endIndent: 10),
           _buildDockItem(
-            index: 3,
+            index: 4,
             icon: Icons.tune_outlined,
             activeIcon: Icons.tune,
             label: 'Ajustes',
@@ -444,10 +453,17 @@ class _MainContainerState extends State<MainContainer> {
                             symbol, watchlistProvider),
                   ),
 
-                  // WORKSPACE 2: EXCHANGES & SINCRONIZACIÓN
+                  // WORKSPACE 2: RADAR DE CICLOS Y OPORTUNIDADES
+                  MarketRadarWorkspaceScreen(
+                    onOpenSymbolInChart: (symbol) =>
+                        _openSymbolInTradingWorkspace(
+                            symbol, watchlistProvider),
+                  ),
+
+                  // WORKSPACE 3: EXCHANGES & SINCRONIZACIÓN
                   const ExchangesScreen(),
 
-                  // WORKSPACE 3: CONFIGURACIÓN GENERAL Y RESPALDOS
+                  // WORKSPACE 4: CONFIGURACIÓN GENERAL Y RESPALDOS
                   const SettingsScreen(),
                 ],
               ),

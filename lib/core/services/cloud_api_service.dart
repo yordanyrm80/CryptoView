@@ -664,11 +664,34 @@ class CloudApiService {
     }
   }
 
+  /// Lista las monedas seguidas en PostgreSQL (`GET /api/v1/symbols`).
+  Future<List<Map<String, dynamic>>> fetchTrackedSymbols() async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/v1/symbols');
+      final response = await http
+          .get(uri, headers: _authHeaders)
+          .timeout(const Duration(seconds: 6));
+      if (response.statusCode == 200) {
+        final list = json.decode(response.body) as List<dynamic>;
+        return list.cast<Map<String, dynamic>>();
+      }
+    } catch (e) {
+      debugPrint('[CloudApiService] Error en fetchTrackedSymbols: $e');
+    }
+    return [];
+  }
+
   /// Consulta el Radar de Ciclo Macro (`GET /api/v1/market-radar/{symbol}`)
   Future<Map<String, dynamic>?> fetchMarketRadar({String symbol = 'BTC/USDT'}) async {
     try {
-      final s = Uri.encodeComponent(symbol.replaceAll('-', '/').toUpperCase());
-      final uri = Uri.parse('$baseUrl/api/v1/market-radar/$s');
+      final segments = symbol
+          .replaceAll('-', '/')
+          .toUpperCase()
+          .split('/')
+          .where((part) => part.isNotEmpty)
+          .map(Uri.encodeComponent)
+          .join('/');
+      final uri = Uri.parse('$baseUrl/api/v1/market-radar/$segments');
       final response = await http.get(uri, headers: _authHeaders).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
         return json.decode(response.body) as Map<String, dynamic>;

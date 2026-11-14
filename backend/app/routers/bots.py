@@ -36,6 +36,7 @@ CHAMPION_PANIC_RSI_THRESHOLD = 28.0
 CHAMPION_ATR_MULTIPLIER = 1.5
 
 RECOMMENDED_CONFIG_ID = "recommended_btc_quantum_evolution"
+RECOMMENDED_ETH_ULTRA_CONFIG_ID = "recommended_eth_ultra"
 
 RECOMMENDED_QUANTUM_EVOLUTION_PARAMS: Dict[str, Any] = {
     "take_profit_pct": CHAMPION_TAKE_PROFIT_PCT,
@@ -53,6 +54,51 @@ RECOMMENDED_QUANTUM_EVOLUTION_PARAMS: Dict[str, Any] = {
     "enable_compounding": True,
     "macro_indicator": "ema_daily_200",
 }
+
+RECOMMENDED_ETH_ULTRA_PARAMS: Dict[str, Any] = {
+    "take_profit_pct": 4.2,
+    "trailing_stop_pct": 1.4,
+    "trend_weight": 0.85,
+    "base_max_tranches": 5,
+    "extra_floor_tranches": 3,
+    "max_tranches": 8,
+    "base_tranche_weights": [0.30, 0.25, 0.20, 0.15, 0.10],
+    "floor_tranche_weights": [0.50, 0.35, 0.25],
+    "tranche_weights": [0.30, 0.25, 0.20, 0.15, 0.10, 0.50, 0.35, 0.25],
+    "t0_rsi_threshold": 48.0,
+    "panic_rsi_threshold": 28.0,
+    "atr_multiplier": 1.5,
+    "enable_compounding": True,
+    "macro_indicator": "ema_daily_200",
+}
+
+# Declarative table of official protected strategy presets (add new assets cleanly here).
+OFFICIAL_STRATEGY_PRESETS: List[Dict[str, Any]] = [
+    {
+        "id": RECOMMENDED_CONFIG_ID,
+        "strategy_name": CHAMPION_STRATEGY_NAME,
+        "name": "Configuración Recomendada",
+        "description": (
+            "Calibración ganadora oficial (+4,387% en 9 años): TP 4.5%, Trailing Stop 1.4%, "
+            "Tendencia 70%, 5 Tramos Base [30/25/20/15/10%] + 3 Suelo [40/35/25%], RSI T0 48.0, RSI Pánico 28.0."
+        ),
+        "params": RECOMMENDED_QUANTUM_EVOLUTION_PARAMS,
+    },
+    {
+        "id": RECOMMENDED_ETH_ULTRA_CONFIG_ID,
+        "strategy_name": CHAMPION_STRATEGY_NAME,
+        "name": "Configuración Campeona ETH Ultra",
+        "description": (
+            "Calibración óptima para Ethereum (+5,415% en 9 años): TP 4.2%, Trailing Stop 1.4%, "
+            "Tendencia 85%, 5 Tramos Base [30/25/20/15/10%] + 3 Suelo [50/35/25%], RSI T0 48.0, RSI Pánico 28.0."
+        ),
+        "params": RECOMMENDED_ETH_ULTRA_PARAMS,
+    },
+]
+PROTECTED_PRESET_IDS = {preset["id"] for preset in OFFICIAL_STRATEGY_PRESETS}
+PROTECTED_PRESET_NAMES = {
+    preset["name"].lower() for preset in OFFICIAL_STRATEGY_PRESETS
+} | {"configuracion recomendada"}
 
 AVAILABLE_STRATEGIES = [
     {
@@ -105,30 +151,31 @@ async def _ensure_bot_tables(conn) -> None:
             now_ms,
         )
 
-    # Always guarantee the official protected "Configuración Recomendada" exists with exact champion parameters
-    await conn.execute(
-        """
-        INSERT INTO strategy_configs (
-            id, strategy_name, name, description, is_recommended, is_system, params_json, created_at, updated_at
+    # Ensure every official protected preset exists with its validated parameters
+    for preset in OFFICIAL_STRATEGY_PRESETS:
+        await conn.execute(
+            """
+            INSERT INTO strategy_configs (
+                id, strategy_name, name, description, is_recommended, is_system, params_json, created_at, updated_at
+            )
+            VALUES ($1, $2, $3, $4, TRUE, TRUE, $5, $6, $7)
+            ON CONFLICT (id) DO UPDATE SET
+                strategy_name = EXCLUDED.strategy_name,
+                name = EXCLUDED.name,
+                description = EXCLUDED.description,
+                is_recommended = TRUE,
+                is_system = TRUE,
+                params_json = EXCLUDED.params_json,
+                updated_at = EXCLUDED.updated_at;
+            """,
+            preset["id"],
+            preset["strategy_name"],
+            preset["name"],
+            preset["description"],
+            json.dumps(preset["params"]),
+            now_ms,
+            now_ms,
         )
-        VALUES ($1, $2, $3, $4, TRUE, TRUE, $5, $6, $7)
-        ON CONFLICT (id) DO UPDATE SET
-            strategy_name = EXCLUDED.strategy_name,
-            name = EXCLUDED.name,
-            description = EXCLUDED.description,
-            is_recommended = TRUE,
-            is_system = TRUE,
-            params_json = EXCLUDED.params_json,
-            updated_at = EXCLUDED.updated_at;
-        """,
-        RECOMMENDED_CONFIG_ID,
-        CHAMPION_STRATEGY_NAME,
-        "Configuración Recomendada",
-        "Calibración ganadora oficial (+4,387% en 9 años): TP 4.5%, Trailing Stop 1.4%, Tendencia 70%, 5 Tramos Base [30/25/20/15/10%] + 3 Suelo [40/35/25%], RSI T0 48.0, RSI Pánico 28.0.",
-        json.dumps(RECOMMENDED_QUANTUM_EVOLUTION_PARAMS),
-        now_ms,
-        now_ms,
-    )
 
     # Seed default flagship bot if table is empty
     count = await conn.fetchval("SELECT COUNT(*) FROM bots;")
@@ -710,10 +757,10 @@ async def save_strategy_config(req: SaveStrategyConfigIn):
     if not clean_name:
         raise HTTPException(status_code=400, detail="El nombre de la configuración es obligatorio.")
 
-    if clean_name.lower() in ("configuración recomendada", "configuracion recomendada") or req.id == RECOMMENDED_CONFIG_ID:
+    if clean_name.lower() in PROTECTED_PRESET_NAMES or req.id in PROTECTED_PRESET_IDS:
         raise HTTPException(
             status_code=400,
-            detail="La 'Configuración Recomendada' oficial está protegida y es inmodificable. Usa otro nombre para guardar tu configuración personalizada.",
+            detail="Las configuraciones recomendadas oficiales están protegidas y son inmodificables. Usa otro nombre para guardar tu configuración personalizada.",
         )
 
     base_weights = req.base_tranche_weights or list(CHAMPION_BASE_WEIGHTS)
@@ -790,10 +837,10 @@ async def save_strategy_config(req: SaveStrategyConfigIn):
 @router.delete("/bots/strategies/configs/{config_id}")
 async def delete_strategy_config(config_id: str):
     """Deletes a custom strategy configuration. System/Recommended configs cannot be deleted."""
-    if config_id == RECOMMENDED_CONFIG_ID:
+    if config_id in PROTECTED_PRESET_IDS:
         raise HTTPException(
             status_code=403,
-            detail="La 'Configuración Recomendada' oficial es inviolable y no puede ser eliminada.",
+            detail="Las configuraciones recomendadas oficiales son inviolables y no pueden ser eliminadas.",
         )
 
     pool = await get_db_pool()

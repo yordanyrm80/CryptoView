@@ -6,7 +6,8 @@ import 'bot_dialog_helpers.dart';
 import 'bot_preset_dialog.dart';
 
 Future<void> showBotCreateDialog(
-    BuildContext context, BotsProvider provider) async {
+    BuildContext context, BotsProvider provider,
+    {String? initialSymbol, String? initialConfigId}) async {
   const strategies = [
     {
       'id': 'BtcQuantumEvolutionRegimeStrategy',
@@ -14,20 +15,42 @@ Future<void> showBotCreateDialog(
     },
   ];
 
-  const quickSymbols = [
-    'BTC/USDT',
-    'ETH/USDT',
-    'SOL/USDT',
-    'LTC/USDT',
-  ];
-
   String selectedStrategy = 'BtcQuantumEvolutionRegimeStrategy';
-  final recCfg = provider.obtenerConfiguracionRecomendada(selectedStrategy);
+  final availableConfigs =
+      provider.configuracionesParaEstrategia(selectedStrategy);
+  final cleanInitialSym = initialSymbol?.trim().toUpperCase();
+  final quickSymbols = <String>{
+    if (cleanInitialSym != null && cleanInitialSym.isNotEmpty) cleanInitialSym,
+    ...provider.radarSymbols,
+    ...provider.todosLosBots.map((b) => b.simbolo.toUpperCase()),
+  }.toList();
+
+  ConfiguracionEstrategiaBot recCfg;
+  if (initialConfigId != null) {
+    recCfg = availableConfigs.firstWhere(
+      (c) => c.id == initialConfigId,
+      orElse: () => provider.mejorPresetParaSimbolo(
+        cleanInitialSym ?? 'BTC/USDT',
+        strategyName: selectedStrategy,
+      ),
+    );
+  } else {
+    recCfg = provider.mejorPresetParaSimbolo(
+      cleanInitialSym ?? 'BTC/USDT',
+      strategyName: selectedStrategy,
+    );
+  }
   String selectedConfigId = recCfg.id;
 
+  final defaultBase = (cleanInitialSym != null && cleanInitialSym.isNotEmpty)
+      ? cleanInitialSym.split('/').first.toLowerCase()
+      : (quickSymbols.isNotEmpty
+          ? quickSymbols.first.split('/').first.toLowerCase()
+          : 'btc');
+  final defaultId = '${defaultBase}_quantum_01';
   final formKey = GlobalKey<FormState>();
-  final idCtrl = TextEditingController(text: 'btc_quantum_01');
-  final symbolCtrl = TextEditingController(text: 'BTC/USDT');
+  final idCtrl = TextEditingController(text: defaultId);
+  final symbolCtrl = TextEditingController(text: cleanInitialSym ?? 'BTC/USDT');
   final budgetCtrl = TextEditingController(text: '1000.0');
 
   final tpCtrl =
@@ -74,6 +97,8 @@ Future<void> showBotCreateDialog(
         if (!availableConfigs.any((c) => c.id == selectedConfigId)) {
           selectedConfigId = availableConfigs.first.id;
         }
+        final activeRadar =
+            provider.getRadarForSymbol(symbolCtrl.text.trim().toUpperCase());
 
         return AlertDialog(
           backgroundColor: AppColors.surface,
@@ -139,6 +164,7 @@ Future<void> showBotCreateDialog(
                           flex: 2,
                           child: TextFormField(
                             controller: symbolCtrl,
+                            onChanged: (_) => setModalState(() {}),
                             style: const TextStyle(
                                 color: AppColors.textPrimary,
                                 fontSize: 13,
@@ -186,8 +212,22 @@ Future<void> showBotCreateDialog(
                         final isSelected =
                             symbolCtrl.text.trim().toUpperCase() == sym;
                         return InkWell(
-                          onTap: () =>
-                              setModalState(() => symbolCtrl.text = sym),
+                          onTap: () {
+                            setModalState(() {
+                              symbolCtrl.text = sym;
+                              if (idCtrl.text.trim().endsWith('_quantum_01')) {
+                                final base =
+                                    sym.split('/').first.trim().toLowerCase();
+                                idCtrl.text = '${base}_quantum_01';
+                              }
+                              final matchedPreset =
+                                  provider.mejorPresetParaSimbolo(
+                                sym,
+                                strategyName: selectedStrategy,
+                              );
+                              applyConfigToFields(matchedPreset);
+                            });
+                          },
                           borderRadius: BorderRadius.circular(4),
                           child: Container(
                             padding: const EdgeInsets.symmetric(
@@ -219,22 +259,22 @@ Future<void> showBotCreateDialog(
                         );
                       }).toList(),
                     ),
-                    if (provider.marketRadar != null && symbolCtrl.text.trim().toUpperCase().contains('BTC')) ...[
+                    if (activeRadar != null) ...[
                       const SizedBox(height: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
-                          color: (provider.marketRadar!.entryRadar.isIdealEntry
+                          color: (activeRadar.entryRadar.isIdealEntry
                                   ? AppColors.bull
-                                  : (provider.marketRadar!.entryRadar.trafficLight == 'RED'
+                                  : (activeRadar.entryRadar.trafficLight == 'RED'
                                       ? AppColors.bear
                                       : Colors.amber))
                               .withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(
-                            color: (provider.marketRadar!.entryRadar.isIdealEntry
+                            color: (activeRadar.entryRadar.isIdealEntry
                                     ? AppColors.bull
-                                    : (provider.marketRadar!.entryRadar.trafficLight == 'RED'
+                                    : (activeRadar.entryRadar.trafficLight == 'RED'
                                         ? AppColors.bear
                                         : Colors.amber))
                                 .withValues(alpha: 0.35),
@@ -243,28 +283,28 @@ Future<void> showBotCreateDialog(
                         child: Row(
                           children: [
                             Icon(
-                              provider.marketRadar!.entryRadar.isIdealEntry
+                              activeRadar.entryRadar.isIdealEntry
                                   ? Icons.check_circle_outline
-                                  : (provider.marketRadar!.entryRadar.trafficLight == 'RED'
+                                  : (activeRadar.entryRadar.trafficLight == 'RED'
                                       ? Icons.warning_amber_rounded
                                       : Icons.info_outline),
                               size: 14,
-                              color: provider.marketRadar!.entryRadar.isIdealEntry
+                              color: activeRadar.entryRadar.isIdealEntry
                                   ? AppColors.bull
-                                  : (provider.marketRadar!.entryRadar.trafficLight == 'RED'
+                                  : (activeRadar.entryRadar.trafficLight == 'RED'
                                       ? AppColors.bear
                                       : Colors.amber),
                             ),
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
-                                'Radar Macro: ${provider.marketRadar!.entryRadar.title}',
+                                'Radar Macro (${activeRadar.symbol}): ${activeRadar.entryRadar.title}',
                                 style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w600,
-                                  color: provider.marketRadar!.entryRadar.isIdealEntry
+                                  color: activeRadar.entryRadar.isIdealEntry
                                       ? AppColors.bull
-                                      : (provider.marketRadar!.entryRadar.trafficLight == 'RED'
+                                      : (activeRadar.entryRadar.trafficLight == 'RED'
                                           ? AppColors.bear
                                           : Colors.amber),
                                 ),
