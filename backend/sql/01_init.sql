@@ -210,7 +210,12 @@ CREATE TABLE IF NOT EXISTS orders (
     status VARCHAR(32) NOT NULL,
     fee DOUBLE PRECISION DEFAULT 0.0,
     created_at BIGINT NOT NULL,
-    filled_at BIGINT
+    filled_at BIGINT,
+    tranche_index INTEGER,
+    tranche_id INTEGER,
+    candle_timestamp BIGINT,
+    target_sell_price DOUBLE PRECISION,
+    reason TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_orders_bot_status ON orders (bot_id, status);
@@ -232,7 +237,8 @@ CREATE TABLE IF NOT EXISTS tranches (
     buy_timestamp BIGINT,
     sell_timestamp BIGINT,
     profit_usdt DOUBLE PRECISION DEFAULT 0.0,
-    subsidized_satoshis DOUBLE PRECISION DEFAULT 0.0
+    subsidized_satoshis DOUBLE PRECISION DEFAULT 0.0,
+    sell_order_id VARCHAR(64)
 );
 
 CREATE INDEX IF NOT EXISTS idx_tranches_lookup ON tranches (bot_id, status);

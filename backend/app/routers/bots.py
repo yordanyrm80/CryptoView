@@ -350,8 +350,27 @@ async def _build_bot_summary_dict(conn, bot_row) -> Dict[str, Any]:
         elif t_type == "WITHDRAWAL":
             withdrawn += float(c["total"] or 0.0)
 
-    available_usdt = max(0.0, budget + realized_pnl_usdt - invested_usdt - active_buy_fees) + (deposited - withdrawn)
-    current_equity_usdt = available_usdt + open_market_value
+    open_buy_reserved_row = await conn.fetchval(
+        """
+        SELECT COALESCE(SUM(price * amount * 1.001), 0.0)
+        FROM orders
+        WHERE bot_id = $1 AND UPPER(side) = 'BUY' AND UPPER(status) = 'OPEN';
+        """,
+        bot_id,
+    )
+    reserved_open_buy_usdt = float(open_buy_reserved_row or 0.0)
+
+    available_usdt = max(
+        0.0,
+        budget
+        + realized_pnl_usdt
+        - invested_usdt
+        - active_buy_fees
+        + deposited
+        - withdrawn
+        - reserved_open_buy_usdt,
+    )
+    current_equity_usdt = available_usdt + reserved_open_buy_usdt + open_market_value
     unrealized_pnl_usdt = (open_market_value - invested_usdt - active_buy_fees) if active_tranches > 0 else 0.0
     win_rate_pct = (winning_trades / closed_trades * 100.0) if closed_trades > 0 else 0.0
 
