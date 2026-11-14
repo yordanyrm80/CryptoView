@@ -419,6 +419,11 @@ class OrdenEjecutadaBot {
   final double comision;
   final String estado;
   final DateTime fechaCreacion;
+  final DateTime? fechaEjecucion;
+  final int? indiceTramo;
+  final int? idTramo;
+  final double? precioObjetivoVenta;
+  final String? motivo;
 
   const OrdenEjecutadaBot({
     required this.id,
@@ -431,7 +436,19 @@ class OrdenEjecutadaBot {
     required this.comision,
     required this.estado,
     required this.fechaCreacion,
+    this.fechaEjecucion,
+    this.indiceTramo,
+    this.idTramo,
+    this.precioObjetivoVenta,
+    this.motivo,
   });
+
+  bool get estaAbierta => estado.toUpperCase() == 'OPEN';
+  bool get estaCerrada => estado.toUpperCase() == 'CLOSED';
+  bool get estaCancelada {
+    final s = estado.toUpperCase();
+    return s == 'CANCELED' || s == 'CANCELLED';
+  }
 
   factory OrdenEjecutadaBot.fromJson(Map<String, dynamic> json) {
     final rawTs = json['created_at'];
@@ -441,17 +458,34 @@ class OrdenEjecutadaBot {
     } else {
       dt = DateTime.tryParse(rawTs?.toString() ?? '') ?? DateTime.now();
     }
+
+    DateTime? filledDt;
+    final rawFilled = json['filled_at'];
+    if (rawFilled is num && rawFilled > 0) {
+      filledDt = DateTime.fromMillisecondsSinceEpoch(rawFilled.toInt());
+    } else if (rawFilled != null) {
+      filledDt = DateTime.tryParse(rawFilled.toString());
+    }
+
     return OrdenEjecutadaBot(
       id: (json['id'] ?? '').toString(),
       botId: (json['bot_id'] ?? '').toString(),
       simbolo: (json['symbol'] ?? '').toString(),
       side: (json['side'] ?? 'BUY').toString().toUpperCase(),
-      tipoOrden: (json['order_type'] ?? 'LIMIT').toString(),
+      tipoOrden: (json['order_type'] ?? 'LIMIT').toString().toUpperCase(),
       precio: ((json['price'] ?? 0.0) as num).toDouble(),
       cantidad: ((json['amount'] ?? 0.0) as num).toDouble(),
       comision: ((json['fee'] ?? 0.0) as num).toDouble(),
-      estado: (json['status'] ?? 'CLOSED').toString(),
+      estado: (json['status'] ?? 'CLOSED').toString().toUpperCase(),
       fechaCreacion: dt,
+      fechaEjecucion: filledDt,
+      indiceTramo:
+          json['tranche_index'] is num ? (json['tranche_index'] as num).toInt() : null,
+      idTramo: json['tranche_id'] is num ? (json['tranche_id'] as num).toInt() : null,
+      precioObjetivoVenta: json['target_sell_price'] is num
+          ? (json['target_sell_price'] as num).toDouble()
+          : null,
+      motivo: json['reason']?.toString(),
     );
   }
 }

@@ -266,4 +266,12 @@ El motor algorítmico institucional (`bot/`) implementa una arquitectura desacop
      ```
    * Nunca se deben dejar ramas huérfanas con cambios sin integrar a `develop`.
 
+---
+
+## 10. Notas Operativas del Entorno Local (Windows)
+
+* **`flutter analyze`, `dart analyze` y tests Python con `asyncio`**: En Windows, el sandbox de terminal bloquea los sockets locales (`socketpair()` / servidor de análisis de Dart VM), provocando que estos comandos queden congelados indefinidamente. Cuando se detecte este entorno, deben ejecutarse con acceso completo (`BypassSandbox: true`) desde el primer reintento, o bien usar `--no-pub` cuando no haga falta resolver dependencias.
+* **`git push` a GitHub**: El remoto `origin` usa HTTPS con `credential.helper=manager`. En sesiones no interactivas sin token cacheado en Windows Credential Manager, `git push` debe ser ejecutado por el usuario desde una terminal interactiva para completar la autenticación OAuth/GCM.
+
+
 

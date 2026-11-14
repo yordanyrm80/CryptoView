@@ -117,7 +117,11 @@ class _BotOrdersEventsDialogState extends State<BotOrdersEventsDialog>
                 unselectedLabelColor: AppColors.textSecondary,
                 labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                 tabs: [
-                  Tab(text: 'Órdenes Ejecutadas (${_ordenes.length})'),
+                  Tab(
+                    text: _ordenes.any((o) => o.estaAbierta)
+                        ? 'Órdenes (${_ordenes.where((o) => o.estaAbierta).length} abiertas · ${_ordenes.length})'
+                        : 'Órdenes (${_ordenes.length})',
+                  ),
                   Tab(text: 'Bitácora de Eventos (${_eventos.length})'),
                 ],
               ),
@@ -149,53 +153,98 @@ class _BotOrdersEventsDialogState extends State<BotOrdersEventsDialog>
     if (_ordenes.isEmpty) {
       return const Center(
         child: Text(
-          'Sin órdenes ejecutadas aún.',
+          'Sin órdenes registradas aún.',
           style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
         ),
       );
     }
 
+    final sorted = List<OrdenEjecutadaBot>.from(_ordenes)
+      ..sort((a, b) {
+        if (a.estaAbierta != b.estaAbierta) return a.estaAbierta ? -1 : 1;
+        return b.fechaCreacion.compareTo(a.fechaCreacion);
+      });
+
     return ListView.separated(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: _ordenes.length,
+      itemCount: sorted.length,
       separatorBuilder: (_, __) => const Divider(height: 1, color: AppColors.border),
       itemBuilder: (ctx, i) {
-        final o = _ordenes[i];
+        final o = sorted[i];
         final isBuy = o.side == 'BUY';
-        final color = isBuy ? AppColors.bull : Colors.amber;
+        final sideColor = isBuy ? AppColors.bull : Colors.amber;
+        final baseCoin = o.simbolo.contains('/') ? o.simbolo.split('/').first : o.simbolo;
+        final notionalUsdt = o.precio * o.cantidad;
+
+        final Color statusColor;
+        final String statusLabel;
+        if (o.estaAbierta) {
+          statusColor = Colors.cyanAccent;
+          statusLabel = 'EN LIBRO';
+        } else if (o.estaCancelada) {
+          statusColor = AppColors.textSecondary;
+          statusLabel = 'CANCELADA';
+        } else {
+          statusColor = AppColors.bull;
+          statusLabel = 'EJECUTADA';
+        }
+
+        final trancheTag = o.indiceTramo != null ? 'T${o.indiceTramo} · ' : '';
+        final detailText = o.estaAbierta
+            ? '$trancheTag${o.tipoOrden} en KuCoin · \$${notionalUsdt.toStringAsFixed(2)}'
+            : (o.estaCancelada
+                ? '$trancheTag${o.tipoOrden} expirada/cancelada'
+                : '$trancheTag${o.tipoOrden} · Fee: ${_currencyFmt.format(o.comision)} USDT');
 
         return ListTile(
           dense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-          leading: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: color.withValues(alpha: 0.5)),
-            ),
-            child: Text(
-              o.side,
-              style: TextStyle(
-                color: color,
-                fontSize: 10.5,
-                fontWeight: FontWeight.bold,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+          leading: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: sideColor.withValues(alpha: o.estaCancelada ? 0.08 : 0.16),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: sideColor.withValues(alpha: o.estaCancelada ? 0.25 : 0.5),
+                  ),
+                ),
+                child: Text(
+                  o.side,
+                  style: TextStyle(
+                    color: o.estaCancelada ? AppColors.textSecondary : sideColor,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(height: 3),
+              Text(
+                statusLabel,
+                style: TextStyle(
+                  color: statusColor,
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
           ),
           title: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 'Precio: ${_currencyFmt.format(o.precio)}',
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
+                style: TextStyle(
+                  color: o.estaCancelada ? AppColors.textSecondary : AppColors.textPrimary,
                   fontSize: 12.5,
                   fontWeight: FontWeight.w600,
+                  decoration: o.estaCancelada ? TextDecoration.lineThrough : null,
                 ),
               ),
               Text(
-                '${o.cantidad.toStringAsFixed(6)} ${o.simbolo.split("/").first}',
+                '${o.cantidad.toStringAsFixed(6)} $baseCoin',
                 style: const TextStyle(
                   color: AppColors.textSecondary,
                   fontSize: 11.5,
@@ -203,23 +252,46 @@ class _BotOrdersEventsDialogState extends State<BotOrdersEventsDialog>
               ),
             ],
           ),
-          subtitle: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Fee: ${_currencyFmt.format(o.comision)} USDT • ${o.estado}',
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 11,
-                ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Flexible(
+                    child: Text(
+                      detailText,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: o.estaAbierta ? Colors.cyanAccent : AppColors.textSecondary,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _dateFmt.format((o.fechaEjecucion ?? o.fechaCreacion).toLocal()),
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 10.5,
+                    ),
+                  ),
+                ],
               ),
-              Text(
-                _dateFmt.format(o.fechaCreacion.toLocal()),
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
-                  fontSize: 10.5,
+              if (o.motivo != null && o.motivo!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    o.motivo!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 10,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
                 ),
-              ),
             ],
           ),
         );
@@ -246,6 +318,9 @@ class _BotOrdersEventsDialogState extends State<BotOrdersEventsDialog>
         Color evColor = AppColors.primary;
         if (ev.tipoEvento == 'BUY') evColor = AppColors.bull;
         if (ev.tipoEvento == 'SELL') evColor = Colors.amber;
+        if (ev.tipoEvento == 'ORDER_PLACED') evColor = Colors.cyanAccent;
+        if (ev.tipoEvento == 'ORDER_EXPIRED') evColor = Colors.orangeAccent;
+        if (ev.tipoEvento == 'CAPITAL_SYNC') evColor = Colors.purpleAccent;
         if (ev.tipoEvento == 'PAUSED' || ev.tipoEvento == 'STOPPED') evColor = AppColors.bear;
 
         return ListTile(
