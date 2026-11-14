@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 import asyncpg
 
 HALVINGS = [
@@ -11,14 +11,90 @@ HALVINGS = [
     datetime(2024, 4, 19, tzinfo=timezone.utc),
 ]
 
+DEFAULT_RADAR_PROFILE: Dict[str, Any] = {
+    "label": "Generic Crypto Profile",
+    "capitulation_drawdown_pct": -60.0,
+    "capitulation_rsi": 30.0,
+    "capitulation_win_rate": 92.0,
+    "capitulation_avg_return_1y": 165.0,
+    "golden_max_dist_ema200_pct": 30.0,
+    "golden_rsi_min": 45.0,
+    "golden_rsi_max": 66.0,
+    "golden_win_rate": 90.0,
+    "golden_avg_return_1y": 120.0,
+    "use_btc_halving_window": False,
+    "overheated_dist_ema200_pct": 55.0,
+    "overheated_rsi": 74.0,
+    "overheated_avg_return_1y": -42.0,
+    "parabolic_dist_ema200_pct": 80.0,
+}
+
+# Declarative per-base-asset macro cycle overrides (extend by adding one entry).
+ASSET_RADAR_PROFILES: Dict[str, Dict[str, Any]] = {
+    "BTC": {
+        "label": "Bitcoin Institucional / Halving Lead",
+        "capitulation_drawdown_pct": -55.0,
+        "capitulation_rsi": 32.0,
+        "capitulation_win_rate": 100.0,
+        "capitulation_avg_return_1y": 211.1,
+        "golden_max_dist_ema200_pct": 25.0,
+        "golden_rsi_min": 45.0,
+        "golden_rsi_max": 65.0,
+        "golden_win_rate": 100.0,
+        "golden_avg_return_1y": 136.1,
+        "use_btc_halving_window": True,
+        "overheated_dist_ema200_pct": 50.0,
+        "overheated_rsi": 72.0,
+        "overheated_avg_return_1y": -47.0,
+        "parabolic_dist_ema200_pct": 75.0,
+    },
+    "ETH": {
+        "label": "Ethereum High-Beta / ETH Ultra",
+        "capitulation_drawdown_pct": -50.0,
+        "capitulation_rsi": 35.0,
+        "capitulation_win_rate": 100.0,
+        "capitulation_avg_return_1y": 136.0,
+        "golden_max_dist_ema200_pct": 25.0,
+        "golden_rsi_min": 45.0,
+        "golden_rsi_max": 65.0,
+        "golden_win_rate": 100.0,
+        "golden_avg_return_1y": 182.9,
+        "use_btc_halving_window": True,
+        "overheated_dist_ema200_pct": 40.0,
+        "overheated_rsi": 70.0,
+        "overheated_avg_return_1y": -45.0,
+        "parabolic_dist_ema200_pct": 75.0,
+    },
+}
+
+
 class MarketCycleRadarService:
     """
-    Servicio de inteligencia macro consultivo e informativo.
-    Evalúa el estado del ciclo de Bitcoin (o activos seguidos) e identifica:
-      1. Ventanas óptimas de entrada para lanzar bots o ampliar capital.
-      2. Alertas de techo / agotamiento para desescalar o pausar recompras.
-    NUNCA bloquea la operativa: ofrece visibilidad estadística pura.
+    Advisory macro intelligence service.
+    Evaluates multi-asset cycle states generically from hourly history plus declarative
+    per-asset volatility/regime profiles without blocking bot execution.
     """
+
+    @staticmethod
+    def get_profile(symbol: str) -> Dict[str, Any]:
+        """Returns the merged macro profile for a symbol's base asset."""
+        base = symbol.replace("-", "/").upper().split("/")[0].strip()
+        profile = dict(DEFAULT_RADAR_PROFILE)
+        if base in ASSET_RADAR_PROFILES:
+            profile.update(ASSET_RADAR_PROFILES[base])
+        profile["base_asset"] = base
+        return profile
+
+    @staticmethod
+    def _price_decimals(reference_price: float) -> int:
+        """Selects readable decimal precision according to asset price magnitude."""
+        if reference_price <= 0:
+            return 2
+        if reference_price < 0.1:
+            return 6
+        if reference_price < 10.0:
+            return 4
+        return 2
 
     @staticmethod
     def _calculate_days_since_last_halving(now_dt: datetime) -> int:
@@ -107,7 +183,9 @@ class MarketCycleRadarService:
             pi_ratio = sma_111d / sma_350d_x2 if sma_350d_x2 > 0 else 0.0
             is_pi_cycle_top = False
 
-        # Ratios de distancia
+        # Ratios de distancia y perfil calibrado por activo
+        profile = cls.get_profile(norm_symbol)
+        decimals = cls._price_decimals(max(current_price, ath_price))
         dist_ema_200_pct = ((current_price - daily_ema_200) / daily_ema_200) * 100.0
         drawdown_from_ath_pct = ((current_price - ath_price) / ath_price) * 100.0 if ath_price > 0 else 0.0
         days_since_halving = cls._calculate_days_since_last_halving(now_dt)
@@ -118,23 +196,41 @@ class MarketCycleRadarService:
         days_above_ema_200 = round(consecutive_above_hours / 24.0, 1)
 
         # 4. Evaluación de Señal de ENTRADA (Lanzar Bots o Inyectar Capital)
-        if drawdown_from_ath_pct <= -55.0 and daily_rsi <= 32.0:
+        if (
+            drawdown_from_ath_pct <= profile["capitulation_drawdown_pct"]
+            and daily_rsi <= profile["capitulation_rsi"]
+        ):
             entry_status = "PANIC_CAPITULATION"
             entry_traffic_light = "GREEN"
             entry_title = "Pozo de Capitulación (Suelo Histórico)"
-            entry_rec = "Condición de sobreventa y pánico extremo. Históricamente es el arquetipo con mayor retorno compuesto a 1 y 2 años (+211% a 1A, +345% a 2A)."
+            entry_rec = (
+                f"Condición de sobreventa y descuento profundo para {norm_symbol} "
+                f"(DD <= {profile['capitulation_drawdown_pct']:.0f}%, RSI <= {profile['capitulation_rsi']:.0f}). "
+                "Históricamente ofrece una asimetría alcista muy favorable a 1-2 años."
+            )
             is_ideal_entry = True
-            historical_win_rate = 100.0
-            historical_avg_ret_1y = 211.1
-        elif current_price >= daily_ema_200 and dist_ema_200_pct <= 25.0 and 45.0 <= daily_rsi <= 65.0:
+            historical_win_rate = profile["capitulation_win_rate"]
+            historical_avg_ret_1y = profile["capitulation_avg_return_1y"]
+        elif (
+            current_price >= daily_ema_200
+            and dist_ema_200_pct <= profile["golden_max_dist_ema200_pct"]
+            and profile["golden_rsi_min"] <= daily_rsi <= profile["golden_rsi_max"]
+        ):
             entry_status = "GOLDEN_BREAKOUT"
             entry_traffic_light = "GREEN"
             entry_title = "Ventana Dorada de Ruptura"
-            entry_rec = "Estructura alcista confirmada sobre la Daily EMA 200 con RSI en rango sano. Riesgo de atrapamiento secular mínimo (+136% retorno promedio a 1A)."
+            entry_rec = (
+                f"Estructura alcista confirmada sobre la Daily EMA 200 (<= +{profile['golden_max_dist_ema200_pct']:.0f}%) "
+                f"con RSI diario en rango sano ({profile['golden_rsi_min']:.0f}-{profile['golden_rsi_max']:.0f})."
+            )
             is_ideal_entry = True
-            historical_win_rate = 100.0
-            historical_avg_ret_1y = 136.1
-        elif 90 <= days_since_halving <= 180 and current_price >= daily_ema_200:
+            historical_win_rate = profile["golden_win_rate"]
+            historical_avg_ret_1y = profile["golden_avg_return_1y"]
+        elif (
+            profile["use_btc_halving_window"]
+            and 90 <= days_since_halving <= 180
+            and current_price >= daily_ema_200
+        ):
             entry_status = "HALVING_SQUEEZE"
             entry_traffic_light = "GREEN"
             entry_title = "Compresión Post-Halving"
@@ -142,14 +238,21 @@ class MarketCycleRadarService:
             is_ideal_entry = True
             historical_win_rate = 100.0
             historical_avg_ret_1y = 170.0
-        elif dist_ema_200_pct >= 50.0 and daily_rsi >= 72.0:
+        elif (
+            dist_ema_200_pct >= profile["overheated_dist_ema200_pct"]
+            and daily_rsi >= profile["overheated_rsi"]
+        ):
             entry_status = "DANGER_OVERHEATED"
             entry_traffic_light = "RED"
             entry_title = "Zona Roja de Euforia (Peligro de Atrapamiento)"
-            entry_rec = "Mercado parabólico y sobreextendido. Históricamente lanzar bots aquí conlleva pérdidas flotantes severas (-29% a -65% a 1 año)."
+            entry_rec = (
+                f"Mercado sobreextendido para {norm_symbol} "
+                f"(>+{profile['overheated_dist_ema200_pct']:.0f}% sobre EMA200 y RSI >= {profile['overheated_rsi']:.0f}). "
+                "Riesgo elevado de corrección y atrapamiento flotante."
+            )
             is_ideal_entry = False
             historical_win_rate = 0.0
-            historical_avg_ret_1y = -47.0
+            historical_avg_ret_1y = profile["overheated_avg_return_1y"]
         else:
             entry_status = "NEUTRAL_RANGE"
             entry_traffic_light = "YELLOW"
@@ -160,7 +263,6 @@ class MarketCycleRadarService:
             historical_avg_ret_1y = 45.0
 
         # 5. Evaluación de Señal de SALIDA (Desescalado o Cosecha a USDT)
-        # Revisar si en los últimos 60 días estuvo cerca de ATH y luego perdió la Daily EMA 50
         recent_high_60d = float(df["high"].tail(60 * 24).max())
         near_ath_recently = (recent_high_60d >= ath_price * 0.92)
         lost_ema_50 = (current_price < daily_ema_50 * 0.97)
@@ -179,10 +281,10 @@ class MarketCycleRadarService:
             exit_rec = "El precio estuvo en zona de máximos y rompió a la baja la EMA 50 diaria. Entrada típica en fase de distribución."
             is_exit_warning = True
             suggested_action = "MONITOR_OR_DE_RISK"
-        elif dist_ema_200_pct >= 75.0:
+        elif dist_ema_200_pct >= profile["parabolic_dist_ema200_pct"]:
             exit_status = "PARABOLIC_EXHAUSTION"
             exit_traffic_light = "YELLOW"
-            exit_title = "Extensión Parabólica Extrema (>+75% sobre EMA 200)"
+            exit_title = f"Extensión Parabólica Extrema (>+{profile['parabolic_dist_ema200_pct']:.0f}% sobre EMA 200)"
             exit_rec = "El mercado está en euforia extrema. Buen momento para retirar o cosechar parte de las ganancias acumuladas a USDT seguro."
             is_exit_warning = True
             suggested_action = "HARVEST_PROFITS"
@@ -196,17 +298,18 @@ class MarketCycleRadarService:
 
         return {
             "symbol": norm_symbol,
+            "profile_label": profile["label"],
             "calculated_at": now_dt.isoformat(),
-            "current_price": round(current_price, 2),
-            "ath_price": round(ath_price, 2),
-            "daily_ema_200": round(daily_ema_200, 2),
-            "daily_ema_50": round(daily_ema_50, 2),
+            "current_price": round(current_price, decimals),
+            "ath_price": round(ath_price, decimals),
+            "daily_ema_200": round(daily_ema_200, decimals),
+            "daily_ema_50": round(daily_ema_50, decimals),
             "daily_rsi": round(daily_rsi, 1),
             "dist_daily_ema_200_pct": round(dist_ema_200_pct, 2),
             "drawdown_from_ath_pct": round(drawdown_from_ath_pct, 2),
             "days_above_daily_ema_200": days_above_ema_200,
             "days_since_last_halving": days_since_halving,
-            
+
             "entry_radar": {
                 "status": entry_status,
                 "traffic_light": entry_traffic_light,
@@ -216,7 +319,7 @@ class MarketCycleRadarService:
                 "historical_win_rate_1y_pct": historical_win_rate,
                 "historical_avg_return_1y_pct": historical_avg_ret_1y,
             },
-            
+
             "exit_radar": {
                 "status": exit_status,
                 "traffic_light": exit_traffic_light,
@@ -225,11 +328,11 @@ class MarketCycleRadarService:
                 "is_exit_warning": is_exit_warning,
                 "suggested_action": suggested_action,
             },
-            
+
             "pi_cycle_metrics": {
-                "sma_111d": round(sma_111d, 2),
-                "sma_350d_x2": round(sma_350d_x2, 2),
+                "sma_111d": round(sma_111d, decimals),
+                "sma_350d_x2": round(sma_350d_x2, decimals),
                 "pi_ratio": round(pi_ratio, 3),
                 "is_triggered": is_pi_cycle_top,
-            }
+            },
         }

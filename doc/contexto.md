@@ -280,5 +280,16 @@ El motor algorítmico institucional (`bot/`) implementa una arquitectura desacop
   git credential-manager github login
   ```
 
+---
+
+## 11. Tareas Pendientes
+
+* **Investigación cuantitativa de `KCS/USDT` (Radar + Estrategia)**:
+  * En PostgreSQL (`candles_1h`) ya existen `78,869` velas horarias históricas de `KCS/USDT` (~9 años).
+  * **Pendiente** (después de validar el funcionamiento en vivo y probar la app en móvil):
+    1. Ejecutar simulación histórica de arquetipos de entrada/salida para `KCS/USDT` (similar a `bot/scripts/simulate_eth_launch_radar.py`) y añadir su perfil calibrado en `ASSET_RADAR_PROFILES["KCS"]` dentro de `backend/app/services/market_radar.py` (actualmente usa `DEFAULT_RADAR_PROFILE` genérico sin parámetros estimados).
+    2. Investigar y validar si `KCS/USDT` requiere un preset propio en `OFFICIAL_STRATEGY_PRESETS` (`backend/app/routers/bots.py`) y `ConfiguracionEstrategiaBot` (`lib/features/bots/domain/bot_models.dart`).
+
+
 
 

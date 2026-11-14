@@ -8,8 +8,10 @@ import '../domain/bot_models.dart';
 class BotsProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _isConnected = false;
+  bool _cargandoRadares = false;
   String? _lastError;
   DateTime? _lastSyncTime;
+  DateTime? _ultimoRefrescoRadar;
 
   MetricasFlotaBots? _metricas;
   MarketRadarData? _marketRadar;
@@ -18,7 +20,10 @@ class BotsProvider extends ChangeNotifier {
   AjustesMotorBots? _ajustes;
   List<ConfiguracionEstrategiaBot> _configuracionesEstrategia = [
     ConfiguracionEstrategiaBot.recomendadaQuantumEvolution,
+    ConfiguracionEstrategiaBot.recomendadaEthUltra,
   ];
+  final Map<String, MarketRadarData> _radarsBySymbol = {};
+  List<String> _radarSymbols = const ['BTC/USDT', 'ETH/USDT', 'KCS/USDT'];
 
   String _filtroEstado = 'TODOS'; // TODOS, RUNNING, PAUSED, STOPPED
   String _busqueda = '';
@@ -27,10 +32,55 @@ class BotsProvider extends ChangeNotifier {
   String get baseUrl => CloudApiService.instance.baseUrl;
   bool get isLoading => _isLoading;
   bool get isConnected => _isConnected;
+  bool get cargandoRadares => _cargandoRadares;
   String? get lastError => _lastError;
   DateTime? get lastSyncTime => _lastSyncTime;
+  DateTime? get ultimoRefrescoRadar => _ultimoRefrescoRadar;
   MetricasFlotaBots? get metricas => _metricas;
   MarketRadarData? get marketRadar => _marketRadar;
+  Map<String, MarketRadarData> get radarsBySymbol => _radarsBySymbol;
+  List<String> get radarSymbols => List.unmodifiable(_radarSymbols);
+
+  void _syncRadarSymbols(Iterable<String> extraSymbols) {
+    final merged = <String>{
+      ...extraSymbols
+          .map((s) => s.replaceAll('-', '/').trim().toUpperCase())
+          .where((s) => s.contains('/')),
+      ..._bots.map((b) => b.simbolo.replaceAll('-', '/').trim().toUpperCase()),
+      ..._radarsBySymbol.keys,
+    };
+    if (merged.isEmpty) {
+      merged.addAll(const ['BTC/USDT', 'ETH/USDT', 'KCS/USDT']);
+    }
+    _radarSymbols = merged.toList();
+  }
+
+  ConfiguracionEstrategiaBot mejorPresetParaSimbolo(
+    String symbol, {
+    String strategyName = 'BtcQuantumEvolutionRegimeStrategy',
+  }) {
+    final configs = configuracionesParaEstrategia(strategyName);
+    final base = symbol
+        .replaceAll('-', '/')
+        .split('/')
+        .first
+        .trim()
+        .toLowerCase();
+    if (base.isNotEmpty) {
+      final specific = configs.where((c) =>
+          c.id.toLowerCase().startsWith('recommended_${base}_') ||
+          c.id.toLowerCase().contains('_${base}_'));
+      if (specific.isNotEmpty) {
+        return specific.first;
+      }
+    }
+    return obtenerConfiguracionRecomendada(strategyName);
+  }
+
+  MarketRadarData? getRadarForSymbol(String symbol) {
+    final norm = symbol.replaceAll('-', '/').toUpperCase();
+    return _radarsBySymbol[norm] ?? (_marketRadar?.symbol == norm ? _marketRadar : null);
+  }
   List<ResumenBot> get todosLosBots => _bots;
   AjustesMotorBots? get ajustes => _ajustes;
   List<ConfiguracionEstrategiaBot> get configuracionesEstrategia =>
@@ -141,19 +191,35 @@ class BotsProvider extends ChangeNotifier {
         api.fetchBotsOverview(),
         api.fetchBots(),
         api.fetchStrategyConfigs(),
+        api.fetchTrackedSymbols(),
       ]);
 
       final rawMetricas = results[0] as Map<String, dynamic>?;
       final rawBots = results[1] as List<Map<String, dynamic>>?;
       final rawConfigs = results[2] as List<Map<String, dynamic>>;
+      final rawTrackedSymbols = results[3] as List<Map<String, dynamic>>;
+
+      final activeTracked = rawTrackedSymbols
+          .where((row) => row['is_active'] != false)
+          .map((row) => (row['symbol'] ?? '').toString())
+          .where((s) => s.isNotEmpty);
+      if (activeTracked.isNotEmpty) {
+        _syncRadarSymbols(activeTracked);
+      }
 
       if (rawConfigs.isNotEmpty) {
         final parsed = rawConfigs
             .map((e) => ConfiguracionEstrategiaBot.fromJson(e))
             .toList();
-        if (!parsed.any((c) => c.esRecomendada)) {
+        if (!parsed.any((c) =>
+            c.id ==
+            ConfiguracionEstrategiaBot.recomendadaQuantumEvolution.id)) {
           parsed.insert(
               0, ConfiguracionEstrategiaBot.recomendadaQuantumEvolution);
+        }
+        if (!parsed.any(
+            (c) => c.id == ConfiguracionEstrategiaBot.recomendadaEthUltra.id)) {
+          parsed.insert(1, ConfiguracionEstrategiaBot.recomendadaEthUltra);
         }
         _configuracionesEstrategia = parsed;
       }
@@ -176,7 +242,10 @@ class BotsProvider extends ChangeNotifier {
         try {
           final radarJson = await api.fetchMarketRadar(symbol: 'BTC/USDT');
           if (radarJson != null) {
-            _marketRadar = MarketRadarData.fromJson(radarJson);
+            final btcRadar = MarketRadarData.fromJson(radarJson);
+            _marketRadar = btcRadar;
+            _radarsBySymbol['BTC/USDT'] = btcRadar;
+            _ultimoRefrescoRadar ??= DateTime.now();
           }
         } catch (_) {}
       } else {
@@ -420,13 +489,74 @@ class BotsProvider extends ChangeNotifier {
     return res;
   }
 
-  Future<void> actualizarRadarMercado({String symbol = 'BTC/USDT'}) async {
+  Future<void> actualizarRadar(String symbol) async {
+    final norm = symbol.replaceAll('-', '/').toUpperCase();
+    _cargandoRadares = true;
+    notifyListeners();
     try {
-      final radarJson = await CloudApiService.instance.fetchMarketRadar(symbol: symbol);
+      final radarJson =
+          await CloudApiService.instance.fetchMarketRadar(symbol: norm);
       if (radarJson != null) {
-        _marketRadar = MarketRadarData.fromJson(radarJson);
-        notifyListeners();
+        final data = MarketRadarData.fromJson(radarJson);
+        _radarsBySymbol[norm] = data;
+        if (norm == 'BTC/USDT') {
+          _marketRadar = data;
+        }
+        _ultimoRefrescoRadar = DateTime.now();
       }
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      _cargandoRadares = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> actualizarTodosLosRadares({
+    List<String>? symbols,
+  }) async {
+    if (_cargandoRadares) return;
+    _cargandoRadares = true;
+    notifyListeners();
+    try {
+      final api = CloudApiService.instance;
+      if (symbols == null) {
+        final tracked = await api.fetchTrackedSymbols();
+        final active = tracked
+            .where((row) => row['is_active'] != false)
+            .map((row) => (row['symbol'] ?? '').toString())
+            .where((s) => s.isNotEmpty)
+            .toList();
+        if (active.isNotEmpty) {
+          _syncRadarSymbols(active);
+        }
+      } else {
+        _syncRadarSymbols(symbols);
+      }
+
+      final targets = symbols ?? _radarSymbols;
+      await Future.wait(targets.map((sym) async {
+        final norm = sym.replaceAll('-', '/').toUpperCase();
+        try {
+          final radarJson = await api.fetchMarketRadar(symbol: norm);
+          if (radarJson != null) {
+            final data = MarketRadarData.fromJson(radarJson);
+            _radarsBySymbol[norm] = data;
+            if (norm == 'BTC/USDT') {
+              _marketRadar = data;
+            }
+          }
+        } catch (_) {}
+      }));
+      if (_radarsBySymbol.isNotEmpty) {
+        _ultimoRefrescoRadar = DateTime.now();
+      }
+    } finally {
+      _cargandoRadares = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> actualizarRadarMercado({String symbol = 'BTC/USDT'}) async {
+    await actualizarRadar(symbol);
   }
 }
