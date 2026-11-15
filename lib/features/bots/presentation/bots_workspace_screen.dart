@@ -16,10 +16,12 @@ import 'widgets/market_radar_card.dart';
 
 class BotsWorkspaceScreen extends StatefulWidget {
   final ValueChanged<String>? onOpenSymbolInChart;
+  final bool isActive;
 
   const BotsWorkspaceScreen({
     super.key,
     this.onOpenSymbolInChart,
+    this.isActive = true,
   });
 
   @override
@@ -35,11 +37,26 @@ class _BotsWorkspaceScreenState extends State<BotsWorkspaceScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        context.read<BotsProvider>().startPolling();
+    if (widget.isActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && widget.isActive) {
+          context.read<BotsProvider>().startPolling();
+        }
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant BotsWorkspaceScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive != oldWidget.isActive) {
+      final provider = context.read<BotsProvider>();
+      if (widget.isActive) {
+        provider.startPolling();
+      } else {
+        provider.stopPolling();
       }
-    });
+    }
   }
 
   @override
@@ -231,16 +248,12 @@ class _BotsWorkspaceScreenState extends State<BotsWorkspaceScreen> {
   Widget _buildTopBar(BuildContext context, BotsProvider provider) {
     final isConnected = provider.isConnected;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       color: AppColors.surface,
-      child: Wrap(
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: 12,
-        runSpacing: 8,
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isNarrow = constraints.maxWidth < 700;
+          final titleBlock = Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(7),
@@ -252,30 +265,39 @@ class _BotsWorkspaceScreenState extends State<BotsWorkspaceScreen> {
                     color: AppColors.primary, size: 18),
               ),
               const SizedBox(width: 10),
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Gestión de Flota de Bots Cuantitativos',
-                    style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Gestión de Flota de Bots Cuantitativos',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  Text(
-                    'Supervisión de estrategias automatizadas, escaleras de tramos y asignación de liquidez',
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 11,
+                    Text(
+                      'Supervisión de estrategias automatizadas, escaleras de tramos y asignación de liquidez',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 11,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
-          ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
+          );
+
+          final actionsBlock = Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               InkWell(
                 onTap: () => _mostrarDialogoConfiguracion(context, provider),
@@ -284,15 +306,11 @@ class _BotsWorkspaceScreenState extends State<BotsWorkspaceScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: (isConnected
-                            ? AppColors.bull
-                            : Colors.amber)
+                    color: (isConnected ? AppColors.bull : Colors.amber)
                         .withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(
-                      color: (isConnected
-                              ? AppColors.bull
-                              : Colors.amber)
+                      color: (isConnected ? AppColors.bull : Colors.amber)
                           .withValues(alpha: 0.4),
                     ),
                   ),
@@ -304,27 +322,22 @@ class _BotsWorkspaceScreenState extends State<BotsWorkspaceScreen> {
                         height: 7,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color:
-                              isConnected ? AppColors.bull : Colors.amber,
+                          color: isConnected ? AppColors.bull : Colors.amber,
                         ),
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        isConnected
-                            ? 'Motor Activo'
-                            : 'Motor Desconectado',
+                        isConnected ? 'Motor Activo' : 'Motor Desconectado',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color:
-                              isConnected ? AppColors.bull : Colors.amber,
+                          color: isConnected ? AppColors.bull : Colors.amber,
                         ),
                       ),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
               IconButton(
                 icon: provider.isLoading
                     ? const SizedBox(
@@ -336,18 +349,18 @@ class _BotsWorkspaceScreenState extends State<BotsWorkspaceScreen> {
                     : const Icon(Icons.sync,
                         size: 18, color: AppColors.textSecondary),
                 tooltip: 'Sincronizar estado de la flota',
-                onPressed: provider.isLoading
-                    ? null
-                    : () => provider.cargarDatos(),
+                visualDensity: VisualDensity.compact,
+                onPressed:
+                    provider.isLoading ? null : () => provider.cargarDatos(),
               ),
               IconButton(
                 icon: const Icon(Icons.tune,
                     size: 18, color: AppColors.textSecondary),
                 tooltip: 'Parámetros del motor y alertas',
+                visualDensity: VisualDensity.compact,
                 onPressed: () =>
                     _mostrarDialogoConfiguracion(context, provider),
               ),
-              const SizedBox(width: 4),
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
@@ -363,8 +376,28 @@ class _BotsWorkspaceScreenState extends State<BotsWorkspaceScreen> {
                 onPressed: () => _mostrarDialogoCrearBot(context, provider),
               ),
             ],
-          ),
-        ],
+          );
+
+          if (isNarrow) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                titleBlock,
+                const SizedBox(height: 10),
+                actionsBlock,
+              ],
+            );
+          }
+
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(child: titleBlock),
+              const SizedBox(width: 12),
+              actionsBlock,
+            ],
+          );
+        },
       ),
     );
   }
@@ -760,14 +793,11 @@ class _BotsWorkspaceScreenState extends State<BotsWorkspaceScreen> {
           // Cabecera de la tarjeta
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
-            child: Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isNarrow = constraints.maxWidth < 680;
+                final identitySection = Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
                       padding: const EdgeInsets.symmetric(
@@ -788,80 +818,80 @@ class _BotsWorkspaceScreenState extends State<BotsWorkspaceScreen> {
                       ),
                     ),
                     const SizedBox(width: 10),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              bot.idBot,
-                              style: const TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 5,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                bot.idBot,
+                                style: const TextStyle(
+                                  color: AppColors.textPrimary,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            _buildBadge(
-                              text: statusText,
-                              color: statusColor,
-                            ),
-                            const SizedBox(width: 6),
-                            _buildBadge(
-                              text: bot.simulacionDryRun ? 'SIMULACIÓN' : 'EN VIVO',
-                              color: bot.simulacionDryRun
-                                  ? Colors.cyanAccent
-                                  : AppColors.bull,
-                            ),
-                            const SizedBox(width: 6),
-                            _buildBadge(
-                              text: bot.regimenMercado == 'BULL_TREND'
-                                  ? 'TENDENCIA ALCISTA'
-                                  : (bot.regimenMercado == 'PANIC_CAPITULATION'
-                                      ? 'CAPITULACIÓN'
-                                      : 'RANGO'),
-                              color: bot.regimenMercado == 'BULL_TREND'
-                                  ? AppColors.bull
-                                  : (bot.regimenMercado == 'PANIC_CAPITULATION'
+                              _buildBadge(
+                                text: statusText,
+                                color: statusColor,
+                              ),
+                              _buildBadge(
+                                text: bot.simulacionDryRun ? 'SIMULACIÓN' : 'EN VIVO',
+                                color: bot.simulacionDryRun
+                                    ? Colors.cyanAccent
+                                    : AppColors.bull,
+                              ),
+                              _buildBadge(
+                                text: bot.regimenMercado == 'BULL_TREND'
+                                    ? 'TENDENCIA ALCISTA'
+                                    : (bot.regimenMercado == 'PANIC_CAPITULATION'
+                                        ? 'CAPITULACIÓN'
+                                        : 'RANGO'),
+                                color: bot.regimenMercado == 'BULL_TREND'
+                                    ? AppColors.bull
+                                    : (bot.regimenMercado == 'PANIC_CAPITULATION'
+                                        ? AppColors.bear
+                                        : Colors.amber),
+                              ),
+                              if (bot.rsiActual != null)
+                                _buildBadge(
+                                  text: 'RSI ${bot.rsiActual!.toStringAsFixed(1)}',
+                                  color: bot.rsiActual! <= bot.umbralRsiPanico
                                       ? AppColors.bear
-                                      : Colors.amber),
-                            ),
-                            if (bot.rsiActual != null) ...[
-                              const SizedBox(width: 6),
-                              _buildBadge(
-                                text: 'RSI ${bot.rsiActual!.toStringAsFixed(1)}',
-                                color: bot.rsiActual! <= bot.umbralRsiPanico
-                                    ? AppColors.bear
-                                    : (bot.rsiActual! <= bot.umbralRsiT0
-                                        ? Colors.cyanAccent
-                                        : AppColors.textSecondary),
-                              ),
+                                      : (bot.rsiActual! <= bot.umbralRsiT0
+                                          ? Colors.cyanAccent
+                                          : AppColors.textSecondary),
+                                ),
+                              if (bot.nombreSubcuenta != null &&
+                                  bot.nombreSubcuenta!.isNotEmpty)
+                                _buildBadge(
+                                  text: bot.nombreSubcuenta!,
+                                  color: Colors.purpleAccent,
+                                ),
                             ],
-                            if (bot.nombreSubcuenta != null &&
-                                bot.nombreSubcuenta!.isNotEmpty) ...[
-                              const SizedBox(width: 6),
-                              _buildBadge(
-                                text: bot.nombreSubcuenta!,
-                                color: Colors.purpleAccent,
-                              ),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${_formatStrategyName(bot.nombreEstrategia)} · TP ${bot.takeProfitPct}% · TS ${bot.trailingStopPct}% · Tendencia ${(bot.pesoTendencia * 100).toStringAsFixed(0)}% · ${bot.maxTramos} Tramos',
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 11,
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 4),
+                          Text(
+                            '${_formatStrategyName(bot.nombreEstrategia)} · TP ${bot.takeProfitPct}% · TS ${bot.trailingStopPct}% · Tendencia ${(bot.pesoTendencia * 100).toStringAsFixed(0)}% · ${bot.maxTramos} Tramos',
+                            style: const TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
-                ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
+                );
+
+                final controlsSection = Wrap(
+                  spacing: 2,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     IconButton(
                       icon: const Icon(Icons.auto_graph_outlined,
@@ -1065,8 +1095,29 @@ class _BotsWorkspaceScreenState extends State<BotsWorkspaceScreen> {
                     const SizedBox(width: 4),
                     _buildStateControlButtons(provider, bot),
                   ],
-                ),
-              ],
+                );
+
+                if (isNarrow) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      identitySection,
+                      const SizedBox(height: 8),
+                      controlsSection,
+                    ],
+                  );
+                }
+
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(child: identitySection),
+                    const SizedBox(width: 12),
+                    controlsSection,
+                  ],
+                );
+              },
             ),
           ),
 
@@ -1105,80 +1156,86 @@ class _BotsWorkspaceScreenState extends State<BotsWorkspaceScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _buildBotMetricColumn(
-                      'Patrimonio',
-                      _currencyFmt.format(bot.equidadActualUsdt),
-                      AppColors.primary,
-                    ),
-                    _buildBotMetricColumn(
-                      'Invertido',
-                      _currencyFmt.format(bot.montoInvertidoUsdt),
-                      AppColors.textPrimary,
-                    ),
-                    _buildBotMetricColumn(
-                      'Reserva USDT',
-                      _currencyFmt.format(bot.usdtDisponible),
-                      AppColors.bull,
-                    ),
-                    _buildBotMetricColumn(
-                      'PnL Flotante',
-                      '${bot.beneficioNoRealizadoUsdt >= 0 ? '+' : ''}${_currencyFmt.format(bot.beneficioNoRealizadoUsdt)}',
-                      bot.beneficioNoRealizadoUsdt >= 0
-                          ? AppColors.bull
-                          : AppColors.bear,
-                    ),
-                    _buildBotMetricColumn(
-                      'PnL Realizado',
-                      '${bot.beneficioRealizadoUsdt >= 0 ? '+' : ''}${_currencyFmt.format(bot.beneficioRealizadoUsdt)}',
-                      bot.beneficioRealizadoUsdt >= 0
-                          ? AppColors.bull
-                          : AppColors.bear,
-                    ),
-                  ],
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final metrics = [
+                      _buildBotMetricColumn(
+                        'Patrimonio',
+                        _currencyFmt.format(bot.equidadActualUsdt),
+                        AppColors.primary,
+                      ),
+                      _buildBotMetricColumn(
+                        'Invertido',
+                        _currencyFmt.format(bot.montoInvertidoUsdt),
+                        AppColors.textPrimary,
+                      ),
+                      _buildBotMetricColumn(
+                        'Reserva USDT',
+                        _currencyFmt.format(bot.usdtDisponible),
+                        AppColors.bull,
+                      ),
+                      _buildBotMetricColumn(
+                        'PnL Flotante',
+                        '${bot.beneficioNoRealizadoUsdt >= 0 ? '+' : ''}${_currencyFmt.format(bot.beneficioNoRealizadoUsdt)}',
+                        bot.beneficioNoRealizadoUsdt >= 0
+                            ? AppColors.bull
+                            : AppColors.bear,
+                      ),
+                      _buildBotMetricColumn(
+                        'PnL Realizado',
+                        '${bot.beneficioRealizadoUsdt >= 0 ? '+' : ''}${_currencyFmt.format(bot.beneficioRealizadoUsdt)}',
+                        bot.beneficioRealizadoUsdt >= 0
+                            ? AppColors.bull
+                            : AppColors.bear,
+                      ),
+                    ];
+                    if (constraints.maxWidth < 560) {
+                      return Wrap(
+                        spacing: 16,
+                        runSpacing: 10,
+                        children: metrics
+                            .map((w) => SizedBox(
+                                  width: (constraints.maxWidth - 20) / 2,
+                                  child: w,
+                                ))
+                            .toList(),
+                      );
+                    }
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: metrics,
+                    );
+                  },
                 ),
                 const SizedBox(height: 12),
                 // Barra de ocupación de tramos
-                Row(
-                  children: [
-                    Text(
-                      'Escalera de Tramos: ${bot.tramosActivos} / $totalSlots ocupados',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Row(
-                        children: List.generate(totalSlots, (index) {
-                          final active = index < bot.tramosActivos;
-                          return Expanded(
-                            child: Container(
-                              height: 6,
-                              margin: const EdgeInsets.only(right: 3),
-                              decoration: BoxDecoration(
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final slotsBar = Row(
+                      children: List.generate(totalSlots, (index) {
+                        final active = index < bot.tramosActivos;
+                        return Expanded(
+                          child: Container(
+                            height: 6,
+                            margin: const EdgeInsets.only(right: 3),
+                            decoration: BoxDecoration(
+                              color: active
+                                  ? AppColors.primary
+                                  : AppColors.background,
+                              borderRadius: BorderRadius.circular(2),
+                              border: Border.all(
                                 color: active
                                     ? AppColors.primary
-                                    : AppColors.background,
-                                borderRadius: BorderRadius.circular(2),
-                                border: Border.all(
-                                  color: active
-                                      ? AppColors.primary
-                                      : AppColors.border,
-                                  width: 0.6,
-                                ),
+                                    : AppColors.border,
+                                width: 0.6,
                               ),
                             ),
-                          );
-                        }),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    InkWell(
+                          ),
+                        );
+                      }),
+                    );
+
+                    final toggleButton = InkWell(
                       onTap: () {
                         setState(() {
                           if (isExpanded) {
@@ -1213,8 +1270,52 @@ class _BotsWorkspaceScreenState extends State<BotsWorkspaceScreen> {
                           ],
                         ),
                       ),
-                    ),
-                  ],
+                    );
+
+                    if (constraints.maxWidth < 520) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'Escalera de Tramos: ${bot.tramosActivos} / $totalSlots ocupados',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              toggleButton,
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          slotsBar,
+                        ],
+                      );
+                    }
+
+                    return Row(
+                      children: [
+                        Text(
+                          'Escalera de Tramos: ${bot.tramosActivos} / $totalSlots ocupados',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(child: slotsBar),
+                        const SizedBox(width: 8),
+                        toggleButton,
+                      ],
+                    );
+                  },
                 ),
                 if (isExpanded) ...[
                   const SizedBox(height: 10),

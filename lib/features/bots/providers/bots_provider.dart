@@ -136,17 +136,20 @@ class BotsProvider extends ChangeNotifier {
     return _tramosPorBot[idBot] ?? const [];
   }
 
-  BotsProvider() {
-    _inicializar();
-  }
+  bool _hasInitializedOnce = false;
 
-  Future<void> _inicializar() async {
-    // Carga inicial pasiva
+  BotsProvider();
+
+  /// Carga inicial bajo demanda para no saturar el arranque de la app móvil
+  Future<void> ensureInitialized() async {
+    if (_hasInitializedOnce) return;
+    _hasInitializedOnce = true;
     await cargarDatos(silencioso: true);
   }
 
   /// Inicia el temporizador de sondeo cada 15s cuando la vista de bots está activa
   void startPolling() {
+    _hasInitializedOnce = true;
     if (_pollingTimer != null && _pollingTimer!.isActive) return;
     cargarDatos(silencioso: true);
     _pollingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
@@ -229,25 +232,32 @@ class BotsProvider extends ChangeNotifier {
         final nuevosBots =
             rawBots.map((e) => ResumenBot.fromJson(e)).toList();
 
-        for (final bot in nuevosBots) {
-          final rawTramos = await api.fetchBotTranches(bot.idBot);
-          _tramosPorBot[bot.idBot] =
-              rawTramos.map((e) => TramoBot.fromJson(e)).toList();
+        final trancheLists = await Future.wait(
+          nuevosBots.map((bot) => api.fetchBotTranches(bot.idBot)),
+        );
+        for (int i = 0; i < nuevosBots.length; i++) {
+          _tramosPorBot[nuevosBots[i].idBot] =
+              trancheLists[i].map((e) => TramoBot.fromJson(e)).toList();
         }
 
         _bots = nuevosBots;
         _isConnected = true;
         _lastError = null;
         _lastSyncTime = DateTime.now();
-        try {
-          final radarJson = await api.fetchMarketRadar(symbol: 'BTC/USDT');
-          if (radarJson != null) {
-            final btcRadar = MarketRadarData.fromJson(radarJson);
-            _marketRadar = btcRadar;
-            _radarsBySymbol['BTC/USDT'] = btcRadar;
-            _ultimoRefrescoRadar ??= DateTime.now();
-          }
-        } catch (_) {}
+        final shouldRefreshBtcRadar = _marketRadar == null ||
+            _ultimoRefrescoRadar == null ||
+            DateTime.now().difference(_ultimoRefrescoRadar!).inSeconds >= 60;
+        if (shouldRefreshBtcRadar) {
+          try {
+            final radarJson = await api.fetchMarketRadar(symbol: 'BTC/USDT');
+            if (radarJson != null) {
+              final btcRadar = MarketRadarData.fromJson(radarJson);
+              _marketRadar = btcRadar;
+              _radarsBySymbol['BTC/USDT'] = btcRadar;
+              _ultimoRefrescoRadar ??= DateTime.now();
+            }
+          } catch (_) {}
+        }
       } else {
         _isConnected = false;
         _lastError =

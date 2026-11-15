@@ -253,6 +253,15 @@ class ChartProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  int _preferredInitialLimit = 1500;
+  int get preferredInitialLimit => _preferredInitialLimit;
+
+  void setPreferredInitialLimit(int limit) {
+    if (limit > 0 && _preferredInitialLimit != limit) {
+      _preferredInitialLimit = limit;
+    }
+  }
+
   // Change interval dynamically
   Future<void> changeInterval(String newInterval, String exchange, String symbol) async {
     _activeInterval = newInterval;
@@ -261,7 +270,8 @@ class ChartProvider extends ChangeNotifier {
   }
 
   // Load candle data & SQLite drawings for selected exchange + symbol
-  Future<void> loadChartData(String exchange, String symbol) async {
+  Future<void> loadChartData(String exchange, String symbol, {int? limit}) async {
+    final int targetLimit = limit ?? _preferredInitialLimit;
     // Clear current ruler when changing symbol/pair
     _rulerStartPrice = null;
     _rulerStartTime = null;
@@ -275,12 +285,13 @@ class ChartProvider extends ChangeNotifier {
     _startIncrementalRefreshTimer();
 
     // 1. Immediately load any previously saved candles from local SQLite
+    List<Map<String, dynamic>> cached = const [];
     try {
-      final cached = await DatabaseHelper.instance.getCandles(
+      cached = await DatabaseHelper.instance.getCandles(
         exchange: exchange,
         symbol: symbol,
         interval: _activeInterval,
-        limit: 1500,
+        limit: targetLimit,
       );
       if (cached.isNotEmpty) {
         _candles = cached;
@@ -306,26 +317,31 @@ class ChartProvider extends ChangeNotifier {
         exchange,
         symbol,
         _activeInterval,
-        limit: 1500,
+        limit: targetLimit,
       );
 
       if (fetchedCandles.isNotEmpty) {
-        // 3. Save / Upsert fetched candles into SQLite
-        await DatabaseHelper.instance.saveCandles(
+        // 3. Save / Upsert fetched candles into SQLite asynchronously
+        final saveFuture = DatabaseHelper.instance.saveCandles(
           exchange: exchange,
           symbol: symbol,
           interval: _activeInterval,
           candles: fetchedCandles,
         );
 
-        // 4. Retrieve complete merged history from SQLite
-        final merged = await DatabaseHelper.instance.getCandles(
-          exchange: exchange,
-          symbol: symbol,
-          interval: _activeInterval,
-          limit: 1500,
-        );
-        _candles = merged.isNotEmpty ? merged : fetchedCandles;
+        // Solo releemos SQLite si el caché local tenía más velas históricas que la descarga
+        if (cached.length > fetchedCandles.length) {
+          await saveFuture;
+          final merged = await DatabaseHelper.instance.getCandles(
+            exchange: exchange,
+            symbol: symbol,
+            interval: _activeInterval,
+            limit: targetLimit,
+          );
+          _candles = merged.isNotEmpty ? merged : fetchedCandles;
+        } else {
+          _candles = fetchedCandles;
+        }
         _rebuildChartData();
       }
 
@@ -339,7 +355,7 @@ class ChartProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Carga un bloque adicional de 1,500 velas históricas anteriores a la vela más antigua actual.
+  /// Carga un bloque adicional de velas históricas anteriores a la vela más antigua actual.
   /// Retorna la cantidad de velas antiguas nuevas agregadas al principio de la serie.
   Future<int> loadMoreHistory(String exchange, String symbol) async {
     if (_isLoading || _isLoadingMoreHistory || _hasReachedHistoryEnd || _candles.isEmpty) {
@@ -347,6 +363,7 @@ class ChartProvider extends ChangeNotifier {
     }
 
     _isLoadingMoreHistory = true;
+    final int batchLimit = _preferredInitialLimit < 1500 ? 600 : 1500;
 
     try {
       final int oldestTimeSec = (_candles.first['time'] as num).toInt();
@@ -356,7 +373,7 @@ class ChartProvider extends ChangeNotifier {
         exchange,
         symbol,
         _activeInterval,
-        limit: 1500,
+        limit: batchLimit,
         endTimeSec: beforeSec,
       );
 

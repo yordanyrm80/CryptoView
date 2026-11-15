@@ -118,7 +118,10 @@ class TrackerProvider extends ChangeNotifier {
     if (_isImporting || _isSilentSyncing) return 0;
 
     final credentials = await getCredentials(_activeExchange);
-    if (credentials == null || (credentials['api_key'] as String? ?? '').isEmpty) {
+    final hasLocalCreds = credentials != null &&
+        (credentials['api_key'] as String? ?? '').isNotEmpty;
+    final hasCloudUrl = CloudApiService.instance.baseUrl.isNotEmpty;
+    if (!hasLocalCreds && !hasCloudUrl) {
       return 0;
     }
 
@@ -791,15 +794,6 @@ class TrackerProvider extends ChangeNotifier {
     int lookbackDays = 730,
     bool updateProviderState = true,
   }) async {
-    final credentials = await getCredentials(exchange);
-    if (credentials == null) {
-      throw Exception('No se encontraron credenciales de API para $exchange guardadas.');
-    }
-
-    final apiKey = credentials['api_key'] as String;
-    final apiSecret = credentials['api_secret'] as String;
-    final apiPassphrase = credentials['api_passphrase'] as String? ?? '';
-
     final now = DateTime.now();
     final lookbackDate = now.subtract(Duration(days: lookbackDays));
 
@@ -813,6 +807,7 @@ class TrackerProvider extends ChangeNotifier {
 
     try {
       List<Map<String, dynamic>> fills = [];
+      bool cloudSyncedOk = false;
 
       // 1. Intentar primero sincronización delegada en Cloud API (alta velocidad y centralizada)
       try {
@@ -822,6 +817,7 @@ class TrackerProvider extends ChangeNotifier {
           days: lookbackDays,
         );
         if (cloudSync['status'] == 'ok') {
+          cloudSyncedOk = true;
           final List<dynamic> cloudTrades = cloudSync['new_trades'] ?? [];
           for (var t in cloudTrades) {
             final tradeMap = t as Map<String, dynamic>;
@@ -834,13 +830,46 @@ class TrackerProvider extends ChangeNotifier {
               'createdAt': tTime.millisecondsSinceEpoch,
             });
           }
+
+          // Si syncTrades respondió OK sin trades nuevos, consultar histórico guardado en Cloud DB
+          if (fills.isEmpty) {
+            final storedCloudTrades = await CloudApiService.instance.fetchTrades(
+              exchange: exchange,
+              symbol: symbol,
+              limit: 500,
+            );
+            for (final t in storedCloudTrades) {
+              final rawTime = (t['time'] ?? t['date'])?.toString();
+              if (rawTime == null) continue;
+              final parsedTime = DateTime.tryParse(rawTime)?.toUtc();
+              if (parsedTime == null || parsedTime.isBefore(lookbackDate.toUtc())) {
+                continue;
+              }
+              fills.add({
+                'side': t['side'],
+                'price': (t['price'] as num).toDouble(),
+                'amount': (t['amount'] as num).toDouble(),
+                'fee': ((t['fee'] ?? 0) as num).toDouble(),
+                'createdAt': parsedTime.millisecondsSinceEpoch,
+              });
+            }
+          }
         }
       } catch (e) {
         debugPrint('[TrackerProvider] Fallback a sincronización local directa: $e');
       }
 
-      // 2. Si la nube no devolvió datos nuevos o falló, fallback local directo al exchange
-      if (fills.isEmpty) {
+      // 2. Si la nube falló o no pudo sincronizar, fallback local directo al exchange con API keys locales
+      if (!cloudSyncedOk && fills.isEmpty) {
+        final credentials = await getCredentials(exchange);
+        if (credentials == null) {
+          throw Exception('No se encontraron credenciales de API para $exchange guardadas.');
+        }
+
+        final apiKey = credentials['api_key'] as String;
+        final apiSecret = credentials['api_secret'] as String;
+        final apiPassphrase = credentials['api_passphrase'] as String? ?? '';
+
         void handleProgress(double progress, String statusMessage, int foundCount) {
           if (updateProviderState) {
             _importProgress = progress;

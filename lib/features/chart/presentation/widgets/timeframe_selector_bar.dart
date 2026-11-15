@@ -41,7 +41,7 @@ class TimeframeSelectorBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 38,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: const BoxDecoration(
         color: AppColors.card,
         border: Border(
@@ -49,18 +49,23 @@ class TimeframeSelectorBar extends StatelessWidget {
         ),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              _timeframeButton('1m', '1m'),
-              _timeframeButton('5m', '5m'),
-              _timeframeButton('15m', '15m'),
-              _timeframeButton('1h', '1h'),
-              _timeframeButton('4h', '4h'),
-              _timeframeButton('1d', '1d'),
-            ],
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _timeframeButton('1m', '1m'),
+                  _timeframeButton('5m', '5m'),
+                  _timeframeButton('15m', '15m'),
+                  _timeframeButton('1h', '1h'),
+                  _timeframeButton('4h', '4h'),
+                  _timeframeButton('1d', '1d'),
+                ],
+              ),
+            ),
           ),
+          const SizedBox(width: 6),
           InkWell(
             borderRadius: BorderRadius.circular(8),
             onTap: onOpenLayers,

@@ -56,7 +56,7 @@ tasks.configureEach {
                 flutterApkDir.mkdirs()
                 val vName = android.defaultConfig.versionName ?: "1.0.0"
                 val vCode = android.defaultConfig.versionCode ?: 1
-                val brandedApk = File(flutterApkDir, "CryptoViewPro-v${vName}-b${vCode}-release.apk")
+                val brandedApk = File(flutterApkDir, "CryptoView-v${vName}-b${vCode}-release.apk")
                 sourceApk.copyTo(brandedApk, overwrite = true)
                 println("Branded APK created: ${brandedApk.absolutePath}")
             }

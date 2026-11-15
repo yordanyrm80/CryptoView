@@ -214,13 +214,19 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
     return closest.date;
   }
 
+  int _activeMainTabIndex = 0;
+
   void _handleTabChange() {
     if (!mounted) return;
+    final newIndex = _mainTabController.index;
     final orderBookProvider = Provider.of<OrderBookProvider>(context, listen: false);
-    if (_mainTabController.index == 1) {
+    if (newIndex == 1) {
       orderBookProvider.startPolling();
     } else {
       orderBookProvider.stopPolling();
+    }
+    if (_activeMainTabIndex != newIndex) {
+      setState(() => _activeMainTabIndex = newIndex);
     }
   }
 
@@ -235,6 +241,9 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final isMobileWidth = MediaQuery.of(context).size.width < 600;
+    Provider.of<ChartProvider>(context, listen: false)
+        .setPreferredInitialLimit(isMobileWidth ? 400 : 1500);
     final watchlistProvider = Provider.of<WatchlistProvider>(context);
     final chartProvider = Provider.of<ChartProvider>(context, listen: false);
 
@@ -396,7 +405,11 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
   @override
   Widget build(BuildContext context) {
     final chartProvider = Provider.of<ChartProvider>(context);
-    final watchlistProvider = Provider.of<WatchlistProvider>(context);
+    final watchlistProvider = Provider.of<WatchlistProvider>(context, listen: false);
+    // Solo reconstruye el gráfico cuando cambian el exchange, símbolo activo o su precio actual
+    context.select<WatchlistProvider, (String, String, double?)>(
+      (w) => (w.currentExchange, w.selectedSymbol, w.prices[w.selectedSymbol]),
+    );
     final trackerProvider = Provider.of<TrackerProvider>(context);
     final settingsProvider = Provider.of<SettingsProvider>(context);
     // Isolate trading provider listener: only rebuild ChartScreen if openOrders changes
@@ -651,6 +664,10 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
             color: AppColors.card,
             child: TabBar(
               controller: _mainTabController,
+              isScrollable: MediaQuery.of(context).size.width < 600,
+              tabAlignment: MediaQuery.of(context).size.width < 600
+                  ? TabAlignment.start
+                  : TabAlignment.fill,
               indicatorColor: AppColors.primary,
               indicatorWeight: 2.5,
               labelColor: AppColors.primary,
@@ -708,6 +725,7 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
             plotBands: plotBands,
           ),
           OrderBookScreen(
+            isActive: _activeMainTabIndex == 1,
             onPriceSelected: (price, side) {
               context.read<TradingProvider>().preloadFromPrice(price, side: side);
               _mainTabController.animateTo(2);
@@ -753,7 +771,10 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
           flex: 3,
           child: Container(
             color: const Color(0xFF0B0E11),
-            padding: const EdgeInsets.only(top: 8, right: 8),
+            padding: EdgeInsets.only(
+              top: 6,
+              right: MediaQuery.of(context).size.width < 600 ? 2 : 8,
+            ),
             child: Stack(
               children: [
                 if (chartData.isEmpty && !chartProvider.isLoading)
@@ -942,7 +963,30 @@ class _ChartScreenState extends State<ChartScreen> with SingleTickerProviderStat
                     primaryYAxis: NumericAxis(
                       name: 'primaryYAxis',
                       opposedPosition: true,
-                      numberFormat: NumberFormat.simpleCurrency(decimalDigits: currentPrice != null && currentPrice < 1.0 ? 4 : 2),
+                      maximumLabels: MediaQuery.of(context).size.width < 600 ? 5 : 7,
+                      majorTickLines: MajorTickLines(
+                        size: MediaQuery.of(context).size.width < 600 ? 2 : 5,
+                        width: 0.5,
+                        color: AppColors.gridLine,
+                      ),
+                      edgeLabelPlacement: EdgeLabelPlacement.shift,
+                      labelStyle: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: MediaQuery.of(context).size.width < 600 ? 9.5 : 11,
+                      ),
+                      numberFormat: MediaQuery.of(context).size.width < 600
+                          ? NumberFormat.currency(
+                              locale: 'en_US',
+                              symbol: r'$',
+                              decimalDigits: currentPrice != null && currentPrice < 1.0
+                                  ? 4
+                                  : (currentPrice != null && currentPrice >= 100.0 ? 0 : 2),
+                            )
+                          : NumberFormat.currency(
+                              locale: 'en_US',
+                              symbol: r'$',
+                              decimalDigits: currentPrice != null && currentPrice < 1.0 ? 4 : 2,
+                            ),
                       majorGridLines: const MajorGridLines(color: AppColors.gridLine, width: 0.5),
                       borderColor: Colors.transparent,
                       axisLine: const AxisLine(color: AppColors.gridLine),
