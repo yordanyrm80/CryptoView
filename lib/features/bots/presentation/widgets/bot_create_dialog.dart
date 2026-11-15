@@ -100,8 +100,12 @@ Future<void> showBotCreateDialog(
         final activeRadar =
             provider.getRadarForSymbol(symbolCtrl.text.trim().toUpperCase());
 
+        final dialogWidth =
+            (MediaQuery.of(ctx).size.width * 0.92).clamp(300.0, 560.0);
+
         return AlertDialog(
           backgroundColor: AppColors.surface,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
             side: const BorderSide(color: AppColors.border),
@@ -111,18 +115,20 @@ Future<void> showBotCreateDialog(
               Icon(Icons.smart_toy_outlined,
                   color: AppColors.primary, size: 20),
               SizedBox(width: 10),
-              Text(
-                'Desplegar Nueva Instancia de Bot',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+              Expanded(
+                child: Text(
+                  'Desplegar Nueva Instancia de Bot',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
           ),
           content: SizedBox(
-            width: 560,
+            width: dialogWidth,
             child: SingleChildScrollView(
               child: Form(
                 key: formKey,

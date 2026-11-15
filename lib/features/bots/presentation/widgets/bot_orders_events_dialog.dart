@@ -59,8 +59,10 @@ class _BotOrdersEventsDialogState extends State<BotOrdersEventsDialog>
 
   @override
   Widget build(BuildContext context) {
+    final media = MediaQuery.of(context).size;
     return AlertDialog(
       backgroundColor: AppColors.surface,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
         side: const BorderSide(color: AppColors.border),
@@ -102,8 +104,8 @@ class _BotOrdersEventsDialogState extends State<BotOrdersEventsDialog>
         ],
       ),
       content: SizedBox(
-        width: 640,
-        height: 440,
+        width: (media.width * 0.92).clamp(300.0, 640.0),
+        height: (media.height * 0.68).clamp(320.0, 440.0),
         child: Column(
           children: [
             Container(
@@ -112,6 +114,7 @@ class _BotOrdersEventsDialogState extends State<BotOrdersEventsDialog>
               ),
               child: TabBar(
                 controller: _tabController,
+                isScrollable: media.width < 480,
                 indicatorColor: AppColors.primary,
                 labelColor: AppColors.primary,
                 unselectedLabelColor: AppColors.textSecondary,
