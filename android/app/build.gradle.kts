@@ -42,3 +42,24 @@ android {
 flutter {
     source = "../.."
 }
+
+tasks.configureEach {
+    if (name == "assembleRelease") {
+        doLast {
+            val apkReleaseDir = layout.buildDirectory.dir("outputs/apk/release").get().asFile
+            val flutterApkDir = layout.buildDirectory.dir("outputs/flutter-apk").get().asFile
+            val sourceApk = listOf(
+                File(flutterApkDir, "app-release.apk"),
+                File(apkReleaseDir, "app-release.apk"),
+            ).firstOrNull { it.exists() }
+            if (sourceApk != null) {
+                flutterApkDir.mkdirs()
+                val vName = android.defaultConfig.versionName ?: "1.0.0"
+                val vCode = android.defaultConfig.versionCode ?: 1
+                val brandedApk = File(flutterApkDir, "CryptoViewPro-v${vName}-b${vCode}-release.apk")
+                sourceApk.copyTo(brandedApk, overwrite = true)
+                println("Branded APK created: ${brandedApk.absolutePath}")
+            }
+        }
+    }
+}

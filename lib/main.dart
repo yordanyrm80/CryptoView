@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
+import 'core/constants/app_info.dart';
 import 'core/services/cloud_api_service.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
@@ -58,7 +59,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'CryptoView Pro',
+      title: AppInfo.appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
       home: const MainContainer(),
@@ -356,14 +357,31 @@ class _MainContainerState extends State<MainContainer> {
                     ),
                     const SizedBox(width: 8),
                     const Text(
-                      'CryptoView Pro',
+                      AppInfo.appName,
                       style: TextStyle(
                         color: AppColors.textPrimary,
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: const Text(
+                        AppInfo.versionTag,
+                        style: TextStyle(
+                          color: AppColors.textMuted,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
                     const CloudEngineStatusPill(),
                   ],
                 ),
@@ -496,11 +514,11 @@ class _MainContainerState extends State<MainContainer> {
                         Icon(Icons.star, color: Colors.amber, size: 20),
                         SizedBox(width: 8),
                         Text(
-                          'Seguimiento de Mercado',
+                          '${AppInfo.appName} ${AppInfo.versionTag}',
                           style: TextStyle(
                             color: AppColors.textPrimary,
                             fontWeight: FontWeight.bold,
-                            fontSize: 16,
+                            fontSize: 15,
                           ),
                         ),
                       ],
