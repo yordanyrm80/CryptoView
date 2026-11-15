@@ -218,108 +218,132 @@ class _MarketRadarWorkspaceScreenState
         ? DateFormat('HH:mm:ss').format(lastUpdate)
         : 'Sin sincronizar';
 
+    final titleBlock = Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.primary.withValues(alpha: 0.15),
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(
+            Icons.radar,
+            color: AppColors.primary,
+            size: 22,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Radar de Ciclos & Macro Oportunidades',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 15,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'Diagnóstico cuantitativo: Drawdown ATH, EMA 200, RSI 14 y Halving',
+                style: TextStyle(
+                  color: AppColors.textSecondary.withValues(alpha: 0.8),
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    final controlsBlock = Wrap(
+      spacing: 10,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.access_time, size: 13, color: AppColors.textMuted),
+              const SizedBox(width: 6),
+              Text(
+                'Actualizado: $timeStr',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+        ElevatedButton.icon(
+          onPressed: provider.cargandoRadares
+              ? null
+              : () => provider.actualizarTodosLosRadares(),
+          icon: provider.cargandoRadares
+              ? const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Icon(Icons.sync, size: 15),
+          label: Text(
+            provider.cargandoRadares ? 'Escaneando...' : 'Actualizar Radar',
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            visualDensity: VisualDensity.compact,
+          ),
+        ),
+      ],
+    );
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: const BoxDecoration(
         color: AppColors.card,
         border: Border(
           bottom: BorderSide(color: AppColors.border, width: 1),
         ),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 720) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                titleBlock,
+                const SizedBox(height: 10),
+                controlsBlock,
+              ],
+            );
+          }
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.radar,
-                  color: AppColors.primary,
-                  size: 22,
-                ),
-              ),
+              Expanded(child: titleBlock),
               const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Radar de Ciclos & Macro Oportunidades',
-                    style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Diagnóstico cuantitativo en tiempo real: Drawdown ATH, EMA 200, RSI 14 y Ciclo de Halving',
-                    style: TextStyle(
-                      color: AppColors.textSecondary.withValues(alpha: 0.8),
-                      fontSize: 11.5,
-                    ),
-                  ),
-                ],
-              ),
+              controlsBlock,
             ],
-          ),
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.access_time, size: 13, color: AppColors.textMuted),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Actualizado: $timeStr',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textSecondary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              ElevatedButton.icon(
-                onPressed: provider.cargandoRadares
-                    ? null
-                    : () => provider.actualizarTodosLosRadares(),
-                icon: provider.cargandoRadares
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.sync, size: 15),
-                label: Text(
-                  provider.cargandoRadares ? 'Escaneando...' : 'Actualizar Radar',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  visualDensity: VisualDensity.compact,
-                ),
-              ),
-            ],
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -562,7 +586,7 @@ class _MarketRadarWorkspaceScreenState
         children: [
           // 1. Encabezado del Activo & Fase de Régimen
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
               color: AppColors.surface.withValues(alpha: 0.5),
               borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
@@ -570,10 +594,10 @@ class _MarketRadarWorkspaceScreenState
                 bottom: BorderSide(color: AppColors.border.withValues(alpha: 0.6)),
               ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isNarrow = constraints.maxWidth < 600;
+                final assetIdentity = Row(
                   children: [
                     CircleAvatar(
                       backgroundColor: coinColor.withValues(alpha: 0.18),
@@ -585,59 +609,63 @@ class _MarketRadarWorkspaceScreenState
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              symbol,
-                              style: const TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Wrap(
+                            spacing: 8,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                symbol,
+                                style: const TextStyle(
+                                  color: AppColors.textPrimary,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              coinName,
-                              style: const TextStyle(
-                                color: AppColors.textSecondary,
-                                fontSize: 12,
+                              Text(
+                                coinName,
+                                style: const TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 12,
+                                ),
                               ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _formatPrice(radar.currentPrice),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.5,
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          _formatPrice(radar.currentPrice),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.5,
                           ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          pi.isTriggered
-                              ? 'Pi Cycle: CRUCE DE TECHO (${pi.piRatio.toStringAsFixed(2)})'
-                              : 'Pi Ratio: ${pi.piRatio.toStringAsFixed(2)}',
-                          style: TextStyle(
-                            color: pi.isTriggered
-                                ? AppColors.bear
-                                : AppColors.textMuted,
-                            fontSize: 10,
-                            fontWeight: pi.isTriggered
-                                ? FontWeight.bold
-                                : FontWeight.w500,
+                          const SizedBox(height: 2),
+                          Text(
+                            pi.isTriggered
+                                ? 'Pi Cycle: CRUCE DE TECHO (${pi.piRatio.toStringAsFixed(2)})'
+                                : 'Pi Ratio: ${pi.piRatio.toStringAsFixed(2)}',
+                            style: TextStyle(
+                              color: pi.isTriggered
+                                  ? AppColors.bear
+                                  : AppColors.textMuted,
+                              fontSize: 10,
+                              fontWeight: pi.isTriggered
+                                  ? FontWeight.bold
+                                  : FontWeight.w500,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ],
-                ),
-                Container(
+                );
+
+                final regimeBadge = Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: regimeColor.withValues(alpha: 0.14),
@@ -645,34 +673,59 @@ class _MarketRadarWorkspaceScreenState
                     border: Border.all(color: regimeColor.withValues(alpha: 0.45)),
                   ),
                   child: Row(
+                    mainAxisSize: isNarrow ? MainAxisSize.max : MainAxisSize.min,
                     children: [
                       Icon(regime['icon'] as IconData, size: 16, color: regimeColor),
                       const SizedBox(width: 6),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            regime['name'] as String,
-                            style: TextStyle(
-                              color: regimeColor,
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.4,
+                      Flexible(
+                        child: Column(
+                          crossAxisAlignment: isNarrow
+                              ? CrossAxisAlignment.start
+                              : CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              regime['name'] as String,
+                              style: TextStyle(
+                                color: regimeColor,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.4,
+                              ),
                             ),
-                          ),
-                          Text(
-                            regime['subtitle'] as String,
-                            style: TextStyle(
-                              color: regimeColor.withValues(alpha: 0.8),
-                              fontSize: 9.5,
+                            Text(
+                              regime['subtitle'] as String,
+                              style: TextStyle(
+                                color: regimeColor.withValues(alpha: 0.8),
+                                fontSize: 9.5,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ],
                   ),
-                ),
-              ],
+                );
+
+                if (isNarrow) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      assetIdentity,
+                      const SizedBox(height: 10),
+                      regimeBadge,
+                    ],
+                  );
+                }
+
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(child: assetIdentity),
+                    const SizedBox(width: 12),
+                    regimeBadge,
+                  ],
+                );
+              },
             ),
           ),
 
@@ -741,7 +794,7 @@ class _MarketRadarWorkspaceScreenState
                       crossAxisSpacing: 8,
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      childAspectRatio: 2.2,
+                      childAspectRatio: constraints.maxWidth < 400 ? 1.65 : 2.1,
                       children: metricWidgets,
                     );
                   },
@@ -749,112 +802,126 @@ class _MarketRadarWorkspaceScreenState
                 const SizedBox(height: 16),
 
                 // 3. Semáforos de Entrada & Salida Macro
-                Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: _getColorForTrafficLight(entry.trafficLight).withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: _getColorForTrafficLight(entry.trafficLight).withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  _getIconForTrafficLight(entry.trafficLight),
-                                  size: 16,
-                                  color: _getColorForTrafficLight(entry.trafficLight),
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    'ENTRADA BOT: ${entry.title}',
-                                    style: TextStyle(
-                                      color: _getColorForTrafficLight(entry.trafficLight),
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 11,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              entry.recommendation,
-                              style: const TextStyle(color: Colors.white70, fontSize: 11),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Validación Histórica 1A: Win Rate ${entry.historicalWinRate1yPct.toStringAsFixed(0)}% · Retorno Medio +${entry.historicalAvgReturn1yPct.toStringAsFixed(1)}%',
-                              style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
-                            ),
-                          ],
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final entryCard = Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: _getColorForTrafficLight(entry.trafficLight).withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: _getColorForTrafficLight(entry.trafficLight).withValues(alpha: 0.3),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: _getColorForTrafficLight(exit.trafficLight).withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: _getColorForTrafficLight(exit.trafficLight).withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  _getIconForTrafficLight(exit.trafficLight),
-                                  size: 16,
-                                  color: _getColorForTrafficLight(exit.trafficLight),
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    'SALIDA / TECHO: ${exit.title}',
-                                    style: TextStyle(
-                                      color: _getColorForTrafficLight(exit.trafficLight),
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 11,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              exit.recommendation,
-                              style: const TextStyle(color: Colors.white70, fontSize: 11),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              exit.suggestedAction == 'NONE'
-                                  ? 'Sin alertas de salida macro activa.'
-                                  : 'Acción sugerida: ${exit.suggestedAction}',
-                              style: TextStyle(
-                                color: exit.isExitWarning ? AppColors.bear : AppColors.textMuted,
-                                fontSize: 10,
-                                fontWeight: exit.isExitWarning ? FontWeight.bold : FontWeight.normal,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                _getIconForTrafficLight(entry.trafficLight),
+                                size: 16,
+                                color: _getColorForTrafficLight(entry.trafficLight),
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'ENTRADA BOT: ${entry.title}',
+                                  style: TextStyle(
+                                    color: _getColorForTrafficLight(entry.trafficLight),
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            entry.recommendation,
+                            style: const TextStyle(color: Colors.white70, fontSize: 11),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Validación Histórica 1A: Win Rate ${entry.historicalWinRate1yPct.toStringAsFixed(0)}% · Retorno Medio +${entry.historicalAvgReturn1yPct.toStringAsFixed(1)}%',
+                            style: const TextStyle(color: AppColors.textMuted, fontSize: 10),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    final exitCard = Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: _getColorForTrafficLight(exit.trafficLight).withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: _getColorForTrafficLight(exit.trafficLight).withValues(alpha: 0.3),
                         ),
                       ),
-                    ),
-                  ],
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                _getIconForTrafficLight(exit.trafficLight),
+                                size: 16,
+                                color: _getColorForTrafficLight(exit.trafficLight),
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'SALIDA / TECHO: ${exit.title}',
+                                  style: TextStyle(
+                                    color: _getColorForTrafficLight(exit.trafficLight),
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            exit.recommendation,
+                            style: const TextStyle(color: Colors.white70, fontSize: 11),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            exit.suggestedAction == 'NONE'
+                                ? 'Sin alertas de salida macro activa.'
+                                : 'Acción sugerida: ${exit.suggestedAction}',
+                            style: TextStyle(
+                              color: exit.isExitWarning ? AppColors.bear : AppColors.textMuted,
+                              fontSize: 10,
+                              fontWeight: exit.isExitWarning ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (constraints.maxWidth < 620) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          entryCard,
+                          const SizedBox(height: 10),
+                          exitCard,
+                        ],
+                      );
+                    }
+
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: entryCard),
+                        const SizedBox(width: 10),
+                        Expanded(child: exitCard),
+                      ],
+                    );
+                  },
                 ),
                 const SizedBox(height: 14),
 
@@ -906,8 +973,10 @@ class _MarketRadarWorkspaceScreenState
                 const SizedBox(height: 16),
 
                 // 5. Botones de Acción Directa
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  spacing: 10,
+                  runSpacing: 8,
                   children: [
                     OutlinedButton.icon(
                       onPressed: () => widget.onOpenSymbolInChart?.call(symbol),
@@ -919,7 +988,6 @@ class _MarketRadarWorkspaceScreenState
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                       ),
                     ),
-                    const SizedBox(width: 10),
                     ElevatedButton.icon(
                       onPressed: () {
                         showBotCreateDialog(

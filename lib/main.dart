@@ -539,7 +539,9 @@ class _MainContainerState extends State<MainContainer> {
         ),
       ),
       body: IndexedStack(
-        index: _mobileTabIndex == 2 ? 1 : 0,
+        index: _mobileTabIndex == 2
+            ? 1
+            : (_mobileTabIndex == 3 ? 2 : 0),
         children: [
           // Vista 0: Gráfico + Panel Deslizable de Operaciones
           Stack(
@@ -658,6 +660,13 @@ class _MainContainerState extends State<MainContainer> {
                   _openSymbolInTradingWorkspace(symbol, watchlistProvider),
             ),
           ),
+          // Vista 2: Radar de Ciclos Macro en Móvil
+          SafeArea(
+            child: MarketRadarWorkspaceScreen(
+              onOpenSymbolInChart: (symbol) =>
+                  _openSymbolInTradingWorkspace(symbol, watchlistProvider),
+            ),
+          ),
         ],
       ),
       bottomNavigationBar: Container(
@@ -670,15 +679,16 @@ class _MainContainerState extends State<MainContainer> {
           backgroundColor: AppColors.card,
           selectedItemColor: AppColors.primary,
           unselectedItemColor: AppColors.textSecondary,
-          selectedFontSize: 11,
-          unselectedFontSize: 10.5,
+          iconSize: 20,
+          selectedFontSize: 10,
+          unselectedFontSize: 9.5,
           onTap: (index) {
             if (index == 0) {
               _mobileScaffoldKey.currentState?.openDrawer();
-            } else if (index == 3) {
+            } else if (index == 4) {
               setState(() => _mobileTabIndex = 1);
               _toggleBottomSheet();
-            } else if (index == 4) {
+            } else if (index == 5) {
               _showExchangesModal();
             } else {
               setState(() => _mobileTabIndex = index);
@@ -702,6 +712,11 @@ class _MainContainerState extends State<MainContainer> {
               label: 'Bots',
             ),
             BottomNavigationBarItem(
+              icon: Icon(Icons.radar_outlined),
+              activeIcon: Icon(Icons.radar, color: AppColors.primary),
+              label: 'Radar',
+            ),
+            BottomNavigationBarItem(
               icon: Icon(Icons.account_balance_wallet_outlined),
               activeIcon:
                   Icon(Icons.account_balance_wallet, color: AppColors.primary),
@@ -711,7 +726,7 @@ class _MainContainerState extends State<MainContainer> {
               icon: Icon(Icons.currency_exchange),
               activeIcon:
                   Icon(Icons.currency_exchange, color: AppColors.primary),
-              label: 'Exchanges',
+              label: 'Exchange',
             ),
           ],
         ),
