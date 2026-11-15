@@ -19,28 +19,70 @@ class DatabaseHelper {
 
   Future<Database> _initDB(String filePath) async {
     String path;
+    File? legacyWindowsDb;
     if (!kIsWeb && Platform.isWindows) {
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
       final directory = await getApplicationSupportDirectory();
       path = join(directory.path, 'CryptoView', filePath);
-      
+
       // Ensure the directory exists
       final fileDir = Directory(join(directory.path, 'CryptoView'));
       if (!await fileDir.exists()) {
         await fileDir.create(recursive: true);
+      }
+
+      legacyWindowsDb = File(
+        join(directory.parent.path, 'cryptoview', 'CryptoView', filePath),
+      );
+      final targetFile = File(path);
+      if (!await targetFile.exists() && await legacyWindowsDb.exists()) {
+        await legacyWindowsDb.copy(path);
       }
     } else {
       final dbPath = await getDatabasesPath();
       path = join(dbPath, filePath);
     }
 
-    return await openDatabase(
+    var db = await openDatabase(
       path,
       version: 6,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
+
+    // Si el cambio de nombre a "CryptoView Pro" creó una DB nueva vacía mientras
+    // existe la DB histórica en ...\cryptoview\CryptoView\, migrarla una sola vez.
+    if (legacyWindowsDb != null &&
+        legacyWindowsDb.path.toLowerCase() != path.toLowerCase() &&
+        await legacyWindowsDb.exists()) {
+      final txCount = Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM transactions'),
+          ) ??
+          0;
+      final keyCount = Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM api_keys'),
+          ) ??
+          0;
+      if (txCount == 0 && keyCount == 0) {
+        await db.close();
+        for (final suffix in ['-wal', '-shm']) {
+          final auxFile = File('$path$suffix');
+          if (await auxFile.exists()) {
+            await auxFile.delete();
+          }
+        }
+        await legacyWindowsDb.copy(path);
+        db = await openDatabase(
+          path,
+          version: 6,
+          onCreate: _createDB,
+          onUpgrade: _upgradeDB,
+        );
+      }
+    }
+
+    return db;
   }
 
   Future _createDB(Database db, int version) async {

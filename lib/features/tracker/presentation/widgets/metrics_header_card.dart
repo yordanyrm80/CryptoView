@@ -38,20 +38,27 @@ class MetricsHeaderCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  const Icon(Icons.filter_list, size: 16, color: AppColors.primary),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Filtrando: ${provider.activeSymbol}',
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
+              Expanded(
+                child: Row(
+                  children: [
+                    const Icon(Icons.filter_list, size: 16, color: AppColors.primary),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Filtrando: ${provider.activeSymbol}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
@@ -83,9 +90,13 @@ class MetricsHeaderCard extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Text(
-                          'SALDO $quoteAsset (${provider.activeExchange})',
-                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 10, fontWeight: FontWeight.bold),
+                        Flexible(
+                          child: Text(
+                            'SALDO $quoteAsset (${provider.activeExchange})',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: AppColors.textSecondary, fontSize: 10, fontWeight: FontWeight.bold),
+                          ),
                         ),
                         const SizedBox(width: 4),
                         if (provider.isFetchingBalance)

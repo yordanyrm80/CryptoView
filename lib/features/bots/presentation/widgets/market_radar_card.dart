@@ -62,8 +62,11 @@ class MarketRadarCard extends StatelessWidget {
               ),
             ],
           ),
-          content: SizedBox(
-            width: 580,
+          content: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 580,
+              maxHeight: MediaQuery.of(context).size.height * 0.72,
+            ),
             child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -90,13 +93,15 @@ class MarketRadarCard extends StatelessWidget {
                               size: 20,
                             ),
                             const SizedBox(width: 8),
-                            Text(
-                              'SEMÁFORO DE ENTRADA: ${entry.title}',
-                              style: TextStyle(
-                                color:
-                                    _getColorForTrafficLight(entry.trafficLight),
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
+                            Expanded(
+                              child: Text(
+                                'SEMÁFORO DE ENTRADA: ${entry.title}',
+                                style: TextStyle(
+                                  color:
+                                      _getColorForTrafficLight(entry.trafficLight),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
                               ),
                             ),
                           ],
@@ -108,7 +113,9 @@ class MarketRadarCard extends StatelessWidget {
                               color: Colors.white70, fontSize: 12),
                         ),
                         const SizedBox(height: 6),
-                        Row(
+                        Wrap(
+                          spacing: 16,
+                          runSpacing: 4,
                           children: [
                             Text(
                               'Win Rate Histórico 1A: ${entry.historicalWinRate1yPct.toStringAsFixed(0)}%',
@@ -118,7 +125,6 @@ class MarketRadarCard extends StatelessWidget {
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            const SizedBox(width: 16),
                             Text(
                               'Retorno Medio 1A: ${entry.historicalAvgReturn1yPct >= 0 ? '+' : ''}${entry.historicalAvgReturn1yPct.toStringAsFixed(1)}%',
                               style: TextStyle(
@@ -156,13 +162,15 @@ class MarketRadarCard extends StatelessWidget {
                               size: 20,
                             ),
                             const SizedBox(width: 8),
-                            Text(
-                              'SEMÁFORO DE SALIDA: ${exit.title}',
-                              style: TextStyle(
-                                color:
-                                    _getColorForTrafficLight(exit.trafficLight),
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
+                            Expanded(
+                              child: Text(
+                                'SEMÁFORO DE SALIDA: ${exit.title}',
+                                style: TextStyle(
+                                  color:
+                                      _getColorForTrafficLight(exit.trafficLight),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
                               ),
                             ),
                           ],
@@ -311,38 +319,49 @@ class MarketRadarCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 6,
             children: [
-              const Icon(Icons.radar, color: AppColors.primary, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                'Radar de Ciclo Macro (${radar.symbol})',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
-                      color: AppColors.primary.withValues(alpha: 0.4)),
-                ),
-                child: const Text(
-                  '100% CONSULTIVO',
-                  style: TextStyle(
-                    color: AppColors.primary,
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.radar, color: AppColors.primary, size: 20),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      'Radar de Ciclo Macro (${radar.symbol})',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                          color: AppColors.primary.withValues(alpha: 0.4)),
+                    ),
+                    child: const Text(
+                      '100% CONSULTIVO',
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const Spacer(),
               InkWell(
                 onTap: () => _mostrarDetallesDialog(context, radar),
                 borderRadius: BorderRadius.circular(6),
@@ -350,6 +369,7 @@ class MarketRadarCard extends StatelessWidget {
                   padding:
                       EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         'Ver Diagnóstico',

@@ -9,10 +9,12 @@ import 'widgets/bot_create_dialog.dart';
 
 class MarketRadarWorkspaceScreen extends StatefulWidget {
   final ValueChanged<String>? onOpenSymbolInChart;
+  final bool isActive;
 
   const MarketRadarWorkspaceScreen({
     super.key,
     this.onOpenSymbolInChart,
+    this.isActive = true,
   });
 
   @override
@@ -66,11 +68,25 @@ class _MarketRadarWorkspaceScreenState
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        context.read<BotsProvider>().actualizarTodosLosRadares();
-      }
-    });
+    if (widget.isActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && widget.isActive) {
+          context.read<BotsProvider>().actualizarTodosLosRadares();
+        }
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant MarketRadarWorkspaceScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          context.read<BotsProvider>().actualizarTodosLosRadares();
+        }
+      });
+    }
   }
 
   Color _getColorForTrafficLight(String tl) {
@@ -363,13 +379,15 @@ class _MarketRadarWorkspaceScreenState
             children: [
               const Icon(Icons.lightbulb_outline, size: 16, color: Colors.amber),
               const SizedBox(width: 8),
-              const Text(
-                'GUÍA DE RÉGIMEN PARA EL DESPLIEGUE INTELIGENTE DE BOTS',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.6,
-                  color: AppColors.textPrimary,
+              const Expanded(
+                child: Text(
+                  'GUÍA DE RÉGIMEN PARA EL DESPLIEGUE INTELIGENTE DE BOTS',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.6,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
               ),
             ],
@@ -508,40 +526,49 @@ class _MarketRadarWorkspaceScreenState
 
     if (radar == null) {
       return Container(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: AppColors.card,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: AppColors.border),
         ),
-        child: Row(
+        child: Wrap(
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 12,
+          runSpacing: 12,
           children: [
-            CircleAvatar(
-              backgroundColor: coinColor.withValues(alpha: 0.2),
-              foregroundColor: coinColor,
-              radius: 20,
-              child: Text(coinGlyph, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '$symbol - $coinName',
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                    ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircleAvatar(
+                  backgroundColor: coinColor.withValues(alpha: 0.2),
+                  foregroundColor: coinColor,
+                  radius: 20,
+                  child: Text(coinGlyph, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                ),
+                const SizedBox(width: 12),
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '$symbol - $coinName',
+                        style: const TextStyle(
+                          color: AppColors.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Telemetría de ciclo aún no calculada o servicio en espera.',
+                        style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Telemetría de ciclo aún no calculada o servicio en espera.',
-                    style: TextStyle(color: AppColors.textMuted, fontSize: 12),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
             ElevatedButton.icon(
               onPressed: () => provider.actualizarRadar(symbol),

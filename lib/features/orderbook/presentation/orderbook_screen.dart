@@ -7,10 +7,12 @@ import '../../watchlist/providers/watchlist_provider.dart';
 
 class OrderBookScreen extends StatefulWidget {
   final void Function(double price, String side)? onPriceSelected;
+  final bool isActive;
 
   const OrderBookScreen({
     Key? key,
     this.onPriceSelected,
+    this.isActive = true,
   }) : super(key: key);
 
   @override
@@ -29,11 +31,26 @@ class _OrderBookScreenState extends State<OrderBookScreen> with SingleTickerProv
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        Provider.of<OrderBookProvider>(context, listen: false).startPolling();
+    if (widget.isActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && widget.isActive) {
+          Provider.of<OrderBookProvider>(context, listen: false).startPolling();
+        }
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant OrderBookScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive != oldWidget.isActive) {
+      final provider = Provider.of<OrderBookProvider>(context, listen: false);
+      if (widget.isActive) {
+        provider.startPolling();
+      } else {
+        provider.stopPolling();
       }
-    });
+    }
   }
 
   @override

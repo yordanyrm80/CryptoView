@@ -80,6 +80,7 @@ class _MainContainerState extends State<MainContainer> {
 
   // Mobile navigation index: 1 = Gráfico, 2 = Bots
   int _mobileTabIndex = 1;
+  final Set<int> _visitedMobileTabs = {1};
 
   bool _isWatchlistExpanded = true;
   bool _isTrackerExpanded = true;
@@ -613,22 +614,30 @@ class _MainContainerState extends State<MainContainer> {
                                   mainAxisAlignment:
                                       MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Row(
-                                      children: [
-                                        const Icon(Icons.account_balance_wallet,
-                                            color: AppColors.primary, size: 16),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          'Operaciones y Casamientos (${watchlistProvider.selectedSymbol})',
-                                          style: const TextStyle(
-                                            color: AppColors.textPrimary,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 12,
+                                    Expanded(
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.account_balance_wallet,
+                                              color: AppColors.primary, size: 16),
+                                          const SizedBox(width: 6),
+                                          Expanded(
+                                            child: Text(
+                                              'Operaciones (${watchlistProvider.selectedSymbol})',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                color: AppColors.textPrimary,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 12,
+                                              ),
+                                            ),
                                           ),
-                                        ),
-                                      ],
+                                        ],
+                                      ),
                                     ),
+                                    const SizedBox(width: 8),
                                     Row(
+                                      mainAxisSize: MainAxisSize.min,
                                       children: [
                                         Container(
                                           padding: const EdgeInsets.symmetric(
@@ -671,20 +680,26 @@ class _MainContainerState extends State<MainContainer> {
               ),
             ],
           ),
-          // Vista 1: Espacio de Bots en Móvil
-          SafeArea(
-            child: BotsWorkspaceScreen(
-              onOpenSymbolInChart: (symbol) =>
-                  _openSymbolInTradingWorkspace(symbol, watchlistProvider),
-            ),
-          ),
-          // Vista 2: Radar de Ciclos Macro en Móvil
-          SafeArea(
-            child: MarketRadarWorkspaceScreen(
-              onOpenSymbolInChart: (symbol) =>
-                  _openSymbolInTradingWorkspace(symbol, watchlistProvider),
-            ),
-          ),
+          // Vista 1: Espacio de Bots en Móvil (carga diferida al visitar la pestaña)
+          _visitedMobileTabs.contains(2)
+              ? SafeArea(
+                  child: BotsWorkspaceScreen(
+                    isActive: _mobileTabIndex == 2,
+                    onOpenSymbolInChart: (symbol) =>
+                        _openSymbolInTradingWorkspace(symbol, watchlistProvider),
+                  ),
+                )
+              : const SizedBox.shrink(),
+          // Vista 2: Radar de Ciclos Macro en Móvil (carga diferida al visitar la pestaña)
+          _visitedMobileTabs.contains(3)
+              ? SafeArea(
+                  child: MarketRadarWorkspaceScreen(
+                    isActive: _mobileTabIndex == 3,
+                    onOpenSymbolInChart: (symbol) =>
+                        _openSymbolInTradingWorkspace(symbol, watchlistProvider),
+                  ),
+                )
+              : const SizedBox.shrink(),
         ],
       ),
       bottomNavigationBar: Container(
@@ -709,7 +724,10 @@ class _MainContainerState extends State<MainContainer> {
             } else if (index == 5) {
               _showExchangesModal();
             } else {
-              setState(() => _mobileTabIndex = index);
+              setState(() {
+                _visitedMobileTabs.add(index);
+                _mobileTabIndex = index;
+              });
             }
           },
           items: const [

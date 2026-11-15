@@ -48,7 +48,7 @@ class ChartToolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 46,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: const BoxDecoration(
         color: AppColors.surface,
         border: Border(
@@ -56,9 +56,11 @@ class ChartToolbar extends StatelessWidget {
           bottom: BorderSide(color: AppColors.border, width: 1),
         ),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
           _toolButton(
             context: context,
             tool: 'none',
@@ -100,6 +102,7 @@ class ChartToolbar extends StatelessWidget {
             onPressed: onClearAll,
           ),
         ],
+      ),
       ),
     );
   }
