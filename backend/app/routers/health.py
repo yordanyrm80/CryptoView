@@ -1,6 +1,7 @@
 import json
 from fastapi import APIRouter, Depends
 from typing import Dict, Any
+from app.config import settings
 from app.database import get_db_pool
 from app.auth import verify_api_key
 
@@ -48,6 +49,8 @@ async def health_check():
 
         return {
             "status": "online",
+            "service": settings.APP_NAME,
+            "version": settings.APP_VERSION,
             "database": "connected (TimescaleDB / PostgreSQL 17)",
             # Compatibilidad retroactiva con cliente Flutter existente
             "worker_status": collector_status,

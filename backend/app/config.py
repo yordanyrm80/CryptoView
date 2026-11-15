@@ -1,6 +1,8 @@
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
+    APP_NAME: str = "CryptoView Pro Engine API"
+    APP_VERSION: str = "1.0.0"
     POSTGRES_USER: str = "cryptoview"
     POSTGRES_PASSWORD: str = "cryptoview_secure_pwd"
     POSTGRES_DB: str = "cryptoview_db"

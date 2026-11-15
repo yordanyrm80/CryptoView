@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from contextlib import asynccontextmanager
 
+from app.config import settings
 from app.database import init_db_pool, close_db_pool
 from app.auth import verify_api_key
 from app.routers import candles, trades, symbols, health, api_keys, backup, withdrawals, matches, bots, market_radar
@@ -18,9 +19,9 @@ async def lifespan(app: FastAPI):
     await close_db_pool()
 
 app = FastAPI(
-    title="CryptoView Central Data Engine API",
+    title=settings.APP_NAME,
     description="API privada de alta velocidad y almacén histórico 24/7 de velas y operaciones",
-    version="1.0.0",
+    version=settings.APP_VERSION,
     lifespan=lifespan,
     dependencies=[Depends(verify_api_key)],
     docs_url=None,
@@ -55,8 +56,8 @@ app.include_router(market_radar.router)
 @app.get("/")
 async def root():
     return {
-        "service": "CryptoView Data Engine & Warehouse",
-        "version": "1.0.0",
+        "service": settings.APP_NAME,
+        "version": settings.APP_VERSION,
         "docs": "/docs",
         "health": "/api/v1/health"
     }
